@@ -91,9 +91,9 @@ class Packet:
 
         if payload:
             if (
-                    packet.portnum == PortNum.POSITION_APP
-                    and getattr(payload, "latitude_i", None)
-                    and getattr(payload, "longitude_i", None)
+                packet.portnum == PortNum.POSITION_APP
+                and getattr(payload, "latitude_i", None)
+                and getattr(payload, "longitude_i", None)
             ):
                 pretty_payload = Markup(
                     f'<a href="https://www.google.com/maps/search/?api=1&query={payload.latitude_i * 1e-7},{payload.longitude_i * 1e-7}" target="_blank">map</a>'
@@ -120,7 +120,7 @@ async def build_trace(node_id):
     """Build a recent GPS trace list for a node using position packets."""
     trace = []
     for raw_p in await store.get_packets_from(
-            node_id, PortNum.POSITION_APP, since=datetime.timedelta(hours=24)
+        node_id, PortNum.POSITION_APP, since=datetime.timedelta(hours=24)
     ):
         p = Packet.from_model(raw_p)
         if not p.raw_payload or not p.raw_payload.latitude_i or not p.raw_payload.longitude_i:
@@ -412,7 +412,9 @@ async def graph_traceroute(request):
         paths.add(tuple(path))
         # Сохраняем связи с их метками (используем индекс в пути)
         for i in range(len(path) - 1):
-            edge_labels[(path[i], path[i+1])] = current_path_snr[i] if i < len(current_path_snr) else ""
+            edge_labels[(path[i], path[i + 1])] = (
+                current_path_snr[i] if i < len(current_path_snr) else ""
+            )
 
     used_nodes = set()
     for path in paths:
