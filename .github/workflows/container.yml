@@ -1,4 +1,4 @@
-name: build-and-push
+name: build-push-deploy
 
 on:
   push:
@@ -6,22 +6,25 @@ on:
       - 'rel-*'
 
 jobs:
-  docker:
+  build:
     runs-on: [self-hosted, linux, x64]
-
     permissions:
       contents: read
       packages: write
 
-    env:
-      IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+    outputs:
+      tag: ${{ steps.vars.outputs.tag }}
+      image_name: ${{ steps.vars.outputs.image_name }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set image tag
-        run: echo "TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+      - name: Set variables
+        id: vars
+        run: |
+          echo "tag=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+          echo "image_name=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}" >> $GITHUB_OUTPUT
 
       - name: Log in to registry
         uses: docker/login-action@v3
@@ -33,11 +36,21 @@ jobs:
       - name: Build image
         run: |
           docker build \
-            -t "${IMAGE_NAME}:${TAG}" \
-            -t "${IMAGE_NAME}:latest" \
+            -t "${{ steps.vars.outputs.image_name }}:${{ steps.vars.outputs.tag }}" \
+            -t "${{ steps.vars.outputs.image_name }}:latest" \
             .
 
       - name: Push image
         run: |
-          docker push "${IMAGE_NAME}:${TAG}"
-          docker push "${IMAGE_NAME}:latest"
+          docker push "${{ steps.vars.outputs.image_name }}:${{ steps.vars.outputs.tag }}"
+          docker push "${{ steps.vars.outputs.image_name }}:latest"
+
+  deploy:
+    runs-on: [self-hosted, linux, x64]
+    needs: build
+
+    steps:
+      - name: Deploy
+        run: |
+          cd /home/ant3k/mesh-view
+          bash update.sh
