@@ -384,7 +384,6 @@ async def graph_traceroute(request):
     paths = set()
     node_color = {}
     mqtt_nodes = set()
-    saw_reply = set()
     dest = None
     edge_labels = {}
     for tr in traceroutes:
@@ -447,7 +446,7 @@ async def graph_traceroute(request):
     unique_edges = {}
     for path in paths:
         color = '#' + hex(hash(tuple(path)))[3:9]
-        for src, dest in zip(path, path[1:]):
+        for src, dest in zip(path, path[1:], strict=True):
             if (src, dest) not in unique_edges:
                 unique_edges[(src, dest)] = color
 
