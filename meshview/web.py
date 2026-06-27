@@ -91,9 +91,9 @@ class Packet:
 
         if payload:
             if (
-                packet.portnum == PortNum.POSITION_APP
-                and getattr(payload, "latitude_i", None)
-                and getattr(payload, "longitude_i", None)
+                    packet.portnum == PortNum.POSITION_APP
+                    and getattr(payload, "latitude_i", None)
+                    and getattr(payload, "longitude_i", None)
             ):
                 pretty_payload = Markup(
                     f'<a href="https://www.google.com/maps/search/?api=1&query={payload.latitude_i * 1e-7},{payload.longitude_i * 1e-7}" target="_blank">map</a>'
@@ -120,7 +120,7 @@ async def build_trace(node_id):
     """Build a recent GPS trace list for a node using position packets."""
     trace = []
     for raw_p in await store.get_packets_from(
-        node_id, PortNum.POSITION_APP, since=datetime.timedelta(hours=24)
+            node_id, PortNum.POSITION_APP, since=datetime.timedelta(hours=24)
     ):
         p = Packet.from_model(raw_p)
         if not p.raw_payload or not p.raw_payload.latitude_i or not p.raw_payload.longitude_i:
@@ -358,13 +358,19 @@ async def graph_traceroute(request):
         )
 
     node_ids = set()
+    is_route_back = False
     for tr in traceroutes:
         route = decode_payload.decode_payload(PortNum.TRACEROUTE_APP, tr.route)
         if route is None:
             continue
+        if hasattr(route, 'route_back') and route.route_back:
+            is_route_back = True
+            for node_id in route.route_back:
+                node_ids.add(node_id)
         node_ids.add(tr.gateway_node_id)
         for node_id in route.route:
             node_ids.add(node_id)
+
     node_ids.add(packet.from_node_id)
     node_ids.add(packet.to_node_id)
 
@@ -380,40 +386,38 @@ async def graph_traceroute(request):
     mqtt_nodes = set()
     saw_reply = set()
     dest = None
-    node_seen_time = {}
+    edge_labels = {}
     for tr in traceroutes:
-        if tr.done:
-            saw_reply.add(tr.gateway_node_id)
-        if tr.done and dest:
-            continue
         route = decode_payload.decode_payload(PortNum.TRACEROUTE_APP, tr.route)
         if route is None:
             continue
         path = [packet.from_node_id]
-        path.extend(route.route)
+        current_path_snr = []
+        if is_route_back:
+            path.extend(route.route_back)
+            current_path_snr.extend([f"{s / 4.0:.2f}dB" for s in getattr(route, 'snr_back', [])])
+        else:
+            path.extend(route.route)
+            current_path_snr.extend([f"{s / 4.0:.2f}dB" for s in getattr(route, 'snr_towards', [])])
         if tr.done:
             dest = packet.to_node_id
-            path.append(packet.to_node_id)
-        elif path[-1] != tr.gateway_node_id:
+        if path[-1] != tr.gateway_node_id:
             # It seems some nodes add them self to the list before uplinking
             path.append(tr.gateway_node_id)
-
-        if not tr.done and tr.gateway_node_id not in node_seen_time and tr.import_time_us:
-            node_seen_time[path[-1]] = tr.import_time_us
+        # DB changes rquired
+        #            final_snr = f"{getattr(tr, 'gateway_snr', 0) / 4.0:.2f}dB"
+        #            current_path_snr.append(final_snr)
 
         mqtt_nodes.add(tr.gateway_node_id)
         node_color[path[-1]] = '#' + hex(hash(tuple(path)))[3:9]
         paths.add(tuple(path))
+        # Сохраняем связи с их метками (используем индекс в пути)
+        for i in range(len(path) - 1):
+            edge_labels[(path[i], path[i+1])] = current_path_snr[i] if i < len(current_path_snr) else ""
 
     used_nodes = set()
     for path in paths:
         used_nodes.update(path)
-
-    import_times = [tr.import_time_us for tr in traceroutes if tr.import_time_us]
-    if import_times:
-        first_time = min(import_times)
-    else:
-        first_time = 0
 
     for node_id in used_nodes:
         node = await nodes[node_id]
@@ -423,17 +427,12 @@ async def graph_traceroute(request):
             node_name = (
                 f'[{node.short_name}] {node.long_name}\n{node_id_to_hex(node_id)}\n{node.role}'
             )
-        if node_id in node_seen_time:
-            ms = (node_seen_time[node_id] - first_time) / 1000
-            node_name += f'\n {ms:.2f}ms'
+
         style = 'dashed'
         if node_id == dest:
             style = 'filled'
         elif node_id in mqtt_nodes:
             style = 'solid'
-
-        if node_id in saw_reply:
-            style += ', diagonals'
 
         graph.add_node(
             pydot.Node(
@@ -445,11 +444,17 @@ async def graph_traceroute(request):
                 href=f"/node/{node_id}",
             )
         )
-
+    unique_edges = {}
     for path in paths:
         color = '#' + hex(hash(tuple(path)))[3:9]
-        for src, dest in zip(path, path[1:], strict=False):
-            graph.add_edge(pydot.Edge(src, dest, color=color))
+        for src, dest in zip(path, path[1:]):
+            if (src, dest) not in unique_edges:
+                unique_edges[(src, dest)] = color
+
+    for (src, dest), color in unique_edges.items():
+        label = edge_labels.get((src, dest), "")
+        edge = pydot.Edge(src, dest, color=color, label=label)
+        graph.add_edge(edge)
 
     return web.Response(
         body=graph.create_svg(),
