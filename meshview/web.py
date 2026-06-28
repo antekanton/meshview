@@ -363,10 +363,11 @@ async def graph_traceroute(request):
         route = decode_payload.decode_payload(PortNum.TRACEROUTE_APP, tr.route)
         if route is None:
             continue
-        if hasattr(route, 'route_back') and route.route_back:
+        # Traceroute is done only in packet going through return route
+        if tr.done:
             is_route_back = True
-            for node_id in route.route_back:
-                node_ids.add(node_id)
+        for node_id in getattr(route, 'route_back', []):
+            node_ids.add(node_id)
         node_ids.add(tr.gateway_node_id)
         for node_id in route.route:
             node_ids.add(node_id)
@@ -384,7 +385,7 @@ async def graph_traceroute(request):
     paths = set()
     node_color = {}
     mqtt_nodes = set()
-    dest = None
+    dest = packet.to_node_id if is_route_back else None
     edge_labels = {}
     for tr in traceroutes:
         route = decode_payload.decode_payload(PortNum.TRACEROUTE_APP, tr.route)
@@ -392,14 +393,11 @@ async def graph_traceroute(request):
             continue
         path = [packet.from_node_id]
         current_path_snr = []
-        if is_route_back:
-            path.extend(route.route_back)
-            current_path_snr.extend([f"{s / 4.0:.2f}dB" for s in getattr(route, 'snr_back', [])])
-        else:
-            path.extend(route.route)
-            current_path_snr.extend([f"{s / 4.0:.2f}dB" for s in getattr(route, 'snr_towards', [])])
-        if tr.done:
-            dest = packet.to_node_id
+        direction_route = getattr(route, 'route_back' if is_route_back else 'route', [])
+        direction_route_snr = getattr(route, 'snr_back' if is_route_back else 'snr_towards', [])
+        path.extend(direction_route)
+        if len(direction_route) == len(direction_route_snr):
+            current_path_snr.extend([f"{s / 4.0:.2f}dB" for s in direction_route_snr])
         if path[-1] != tr.gateway_node_id:
             # It seems some nodes add them self to the list before uplinking
             path.append(tr.gateway_node_id)
@@ -411,10 +409,9 @@ async def graph_traceroute(request):
         node_color[path[-1]] = '#' + hex(hash(tuple(path)))[3:9]
         paths.add(tuple(path))
         # Сохраняем связи с их метками (используем индекс в пути)
-        for i in range(len(path) - 1):
-            edge_labels[(path[i], path[i + 1])] = (
-                current_path_snr[i] if i < len(current_path_snr) else ""
-            )
+        if len(current_path_snr) == len(path) - 1:
+            for i in range(len(path) - 1):
+                edge_labels[(path[i], path[i + 1])] = current_path_snr[i]
 
     used_nodes = set()
     for path in paths:
