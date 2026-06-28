@@ -356,6 +356,8 @@ async def graph_traceroute(request):
         return web.Response(
             status=404,
         )
+    packets_seen = await store.get_packets_seen(packet_id)
+    packets_seen_by_gateway_id = {packet_seen.node_id: packet_seen for packet_seen in packets_seen}
 
     node_ids = set()
     is_route_back = False
@@ -391,19 +393,25 @@ async def graph_traceroute(request):
         route = decode_payload.decode_payload(PortNum.TRACEROUTE_APP, tr.route)
         if route is None:
             continue
+        is_received_by_destination = packet.to_node_id == tr.gateway_node_id
         path = [packet.from_node_id]
         current_path_snr = []
         direction_route = getattr(route, 'route_back' if is_route_back else 'route', [])
         direction_route_snr = getattr(route, 'snr_back' if is_route_back else 'snr_towards', [])
         path.extend(direction_route)
-        if len(direction_route) == len(direction_route_snr):
+        if is_received_by_destination:
+            dest = packet.to_node_id
+            if path[-1] != tr.gateway_node_id:
+                path.append(tr.gateway_node_id)
+        if len(direction_route_snr) == len(path) - 1:
             current_path_snr.extend([f"{s / 4.0:.2f}dB" for s in direction_route_snr])
         if path[-1] != tr.gateway_node_id:
             # It seems some nodes add them self to the list before uplinking
             path.append(tr.gateway_node_id)
-        # DB changes rquired
-        #            final_snr = f"{getattr(tr, 'gateway_snr', 0) / 4.0:.2f}dB"
-        #            current_path_snr.append(final_snr)
+            if tr.gateway_node_id in packets_seen_by_gateway_id:
+                current_path_snr.append(
+                    f"{packets_seen_by_gateway_id[tr.gateway_node_id].rx_snr:.2f}dB"
+                )
 
         mqtt_nodes.add(tr.gateway_node_id)
         node_color[path[-1]] = '#' + hex(hash(tuple(path)))[3:9]
