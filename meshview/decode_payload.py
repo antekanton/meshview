@@ -1,3 +1,5 @@
+import base64
+
 from google.protobuf.message import DecodeError
 
 from meshtastic.protobuf.mesh_pb2 import (
@@ -46,7 +48,11 @@ def decode(packet):
     except DecodeError:
         return None, None
 
-    payload = decode_payload(mesh_packet.decoded.portnum, mesh_packet.decoded.payload)
+    payload = None
+    if mesh_packet.HasField('decoded'):
+        payload = decode_payload(mesh_packet.decoded.portnum, mesh_packet.decoded.payload)
+    elif mesh_packet.HasField('encrypted'):
+        payload = 'Encrypted({})'.format(base64.b64encode(mesh_packet.encrypted).decode('utf-8'))
     if payload is None:
         return mesh_packet, None
 
