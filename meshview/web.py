@@ -70,6 +70,12 @@ class Packet:
     def from_model(cls, packet):
         """Convert a Packet ORM model into a presentation-friendly Packet."""
         mesh_packet, payload = decode_payload.decode(packet)
+        raw_payload = None
+        if mesh_packet:
+            if mesh_packet.HasField('encrypted'):
+                raw_payload = mesh_packet.encrypted
+            elif mesh_packet.HasField('decoded'):
+                raw_payload = mesh_packet.decoded.SerializePartialToString()
         pretty_payload = None
 
         if mesh_packet:
@@ -112,7 +118,7 @@ class Packet:
             pretty_payload=pretty_payload,
             import_time_us=packet.import_time_us,  # <-- include microseconds
             raw_mesh_packet=mesh_packet,
-            raw_payload=payload,
+            raw_payload=raw_payload,
         )
 
 
