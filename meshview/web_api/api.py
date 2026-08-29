@@ -164,6 +164,7 @@ async def api_packets(request):
                 "to_node_id": p.to_node_id,
                 "portnum": int(p.portnum) if p.portnum is not None else None,
                 "payload": (p.payload or "").strip(),
+                "payload_size": len(p.raw_payload) if p.raw_payload is not None else 0,
                 "import_time_us": p.import_time_us,
                 "channel": p.channel,
                 "long_name": getattr(p.from_node, "long_name", ""),
@@ -256,6 +257,7 @@ async def api_packets(request):
                 "portnum": int(p.portnum),
                 "long_name": getattr(p.from_node, "long_name", ""),
                 "payload": (p.payload or "").strip(),
+                "payload_size": len(p.raw_payload) if p.raw_payload is not None else 0,
                 "to_long_name": getattr(p.to_node, "long_name", ""),
             }
 

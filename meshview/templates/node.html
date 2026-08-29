@@ -1635,6 +1635,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 function packetSizeBytes(pkt) {
     if (!pkt) return 0;
 
+    if (pkt.payload_size) {
+        return pkt.payload_size;
+    }
+
     // Prefer raw payload length
     if (pkt.payload) {
         return new TextEncoder().encode(pkt.payload).length;
