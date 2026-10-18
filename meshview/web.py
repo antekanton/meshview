@@ -16,6 +16,7 @@ from google.protobuf.message import Message
 from jinja2 import Environment, PackageLoader, Undefined, select_autoescape
 from markupsafe import Markup
 
+from meshtastic.protobuf.mesh_pb2 import Routing
 from meshtastic.protobuf.portnums_pb2 import PortNum
 from meshview import config, database, decode_payload, migrations, models, store
 from meshview.__version__ import (
@@ -53,6 +54,7 @@ class Packet:
     """UI-friendly packet wrapper for templates and API payloads."""
 
     id: int
+    packet_id: int | None
     from_node_id: int
     from_node: models.Node
     to_node_id: int
@@ -86,6 +88,17 @@ class Packet:
 
         if payload is None:
             text_payload = "Did not decode"
+        elif (
+            packet.portnum == PortNum.ROUTING_APP
+            and isinstance(payload, Routing)
+            and payload.WhichOneof("variant") == "error_reason"
+        ):
+            # error_reason NONE is the implicit ACK, not a failure.
+            text_payload = (
+                "ACK"
+                if payload.error_reason == Routing.Error.NONE
+                else f"NAK: {Routing.Error.Name(payload.error_reason)}"
+            )
         elif isinstance(payload, Message):
             text_payload = text_format.MessageToString(payload)
         elif packet.portnum == PortNum.TEXT_MESSAGE_APP and packet.to_node_id != 0xFFFFFFFF:
@@ -105,8 +118,13 @@ class Packet:
                     f'<a href="https://www.google.com/maps/search/?api=1&query={payload.latitude_i * 1e-7},{payload.longitude_i * 1e-7}" target="_blank">map</a>'
                 )
 
+        packet_id = None
+        if mesh_packet and mesh_packet.id:
+            packet_id = mesh_packet.id
+
         return cls(
             id=packet.id,
+            packet_id=packet_id,
             from_node=packet.from_node,
             from_node_id=packet.from_node_id,
             to_node=packet.to_node,
