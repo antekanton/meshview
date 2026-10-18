@@ -365,8 +365,11 @@ async function fetchUpdates() {
                 if (match) traceId = match[1];
 
                 inlineLinks += ` <a class="inline-link"
+                                    href="/graph/traceroute/${traceId}"
+                                    target="_blank">⮕</a>`;
+                inlineLinks += ` <a class="inline-link"
                                     href="/traceroute/${traceId}"
-                                    >⮕</a>`;
+                                    title="Traceroute page">🗺</a>`;
             }
 
             const safePayload = (pkt.payload || "")
