@@ -8,7 +8,7 @@
         "map": "Живая карта",
         "stats": "Статистика",
         "top": "Крупнейшие ноды трафика",
-        "footer": "Посетите <strong><a href=\"https://github.com/pablorevilla-meshtastic/meshview\">Meshview</a></strong> на GitHub",
+        "footer": "Посетите <strong><a href=\"https://github.com/antekanton/meshview\">Meshview</a></strong> на GitHub",
         "node id": "ID ноды",
         "go to node": "Перейти к ноде",
         "all": "Все",
