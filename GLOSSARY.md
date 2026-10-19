@@ -33,3 +33,17 @@ A hop the firmware could not identify, recorded as a placeholder node number in 
 **Gateway**:
 A node that uplinks packets it hears to MQTT; each traceroute observation comes from one gateway.
 _Avoid_: uplink node, MQTT node
+
+## Packet reception
+
+**Reception**:
+One instance of a gateway hearing a packet and uplinking it; the same gateway may produce several receptions of one packet (e.g. directly and via a relay).
+_Avoid_: seen, observation, sighting
+
+**Reach**:
+The number of distinct gateways that heard a packet, regardless of how many receptions each produced.
+_Avoid_: seen count, seen by, reception count
+
+**Active gateway**:
+A gateway that produced at least one reception in the last 24 hours. A packet's reach is read against the number of active gateways.
+_Avoid_: online gateway, known gateway
