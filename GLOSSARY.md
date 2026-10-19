@@ -41,9 +41,9 @@ One instance of a gateway hearing a packet and uplinking it; the same gateway ma
 _Avoid_: seen, observation, sighting
 
 **Reach**:
-The number of distinct gateways that heard a packet, regardless of how many receptions each produced.
+The number of distinct gateways other than the sender that heard a packet, regardless of how many receptions each produced.
 _Avoid_: seen count, seen by, reception count
 
 **Active gateway**:
-A gateway that produced at least one reception within the configured activity window (2 hours by default). A packet's reach is read against the number of active gateways.
+A gateway that, within the configured activity window (2 hours by default), uplinked at least one packet sent by another node on a given channel. A packet's reach is read against the number of active gateways on its channel; a gateway that only uplinks its own packets is never active.
 _Avoid_: online gateway, known gateway

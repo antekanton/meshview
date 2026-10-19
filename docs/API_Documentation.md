@@ -70,10 +70,10 @@ Response Example
       "payload": "Hello, Bob!",
       "to_long_name": "Bob",
       "reach": 3,
+      "active_gateways": 12,
       "reply_id": 122
     }
   ],
-  "active_gateways": 17,
   "latest_import_time": 1736370123456789
 }
 ```
@@ -81,8 +81,8 @@ Response Example
 Notes
 - For `portnum=1` (text messages), packets are filtered to remove sequence-only payloads.
 - `latest_import_time` is returned when available for incremental polling (microseconds).
-- `reach` is the number of distinct gateways that heard the packet; several receptions by the same gateway count once.
-- `active_gateways` is the number of distinct gateways with at least one reception within the last `site.active_gateway_hours` hours (default `2`).
+- `reach` is the number of distinct gateways other than the sender that heard the packet; several receptions by the same gateway count once.
+- `active_gateways` is the number of gateways active on the packet's channel: gateways that uplinked at least one packet from another node on that channel within the last `site.active_gateway_hours` hours (default `2`). Cached for 30 seconds.
 
 ### GET `/api/packets/reach`
 Returns the current reach of the given packets. Used to refresh recently received packets, since gateways keep reporting a packet after it first appears.
@@ -93,16 +93,16 @@ Query Parameters
 Response Example
 ```json
 {
-  "reach": {
-    "123": 3,
-    "124": 0
-  },
-  "active_gateways": 17
+  "packets": {
+    "123": {"reach": 3, "active_gateways": 12},
+    "124": {"reach": 0, "active_gateways": 12}
+  }
 }
 ```
 
 Notes
-- Every requested ID is present in `reach`; packets no gateway has reported have `0`.
+- `reach` and `active_gateways` mean the same as in `/api/packets`.
+- Unknown packet IDs are omitted; known packets no gateway has reported have `reach` `0`.
 - Returns `400` when `ids` is missing, malformed, or has more than 100 entries.
 
 ---

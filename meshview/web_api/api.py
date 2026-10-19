@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import os
+import time
 
 from aiohttp import web
 from sqlalchemy import func, select
@@ -144,6 +145,27 @@ def _active_gateway_window() -> datetime.timedelta:
     return datetime.timedelta(hours=hours)
 
 
+# Every firehose/chat poll needs the active gateway counts, which change slowly.
+ACTIVE_GATEWAYS_CACHE_SECONDS = 30
+_active_gateways_cache = {"expires": 0.0, "by_channel": {}}
+
+
+async def _active_gateways_by_channel() -> dict:
+    now = time.monotonic()
+    if now >= _active_gateways_cache["expires"]:
+        _active_gateways_cache["by_channel"] = await store.get_active_gateways_by_channel(
+            _active_gateway_window()
+        )
+        _active_gateways_cache["expires"] = now + ACTIVE_GATEWAYS_CACHE_SECONDS
+    return _active_gateways_cache["by_channel"]
+
+
+def _reach_fields(packet_id, reach_by_id, active_by_channel) -> dict:
+    """Reach of a packet and the number of active gateways on its channel."""
+    channel, reach = reach_by_id.get(packet_id, (None, 0))
+    return {"reach": reach, "active_gateways": active_by_channel.get(channel, 0)}
+
+
 def _haversine_km(lat1, lon1, lat2, lon2):
     r = 6371.0
     phi1 = math.radians(lat1)
@@ -277,16 +299,14 @@ async def api_packets(request):
                 "channel": p.channel,
                 "long_name": getattr(p.from_node, "long_name", ""),
             }
-            reach = await store.get_packets_reach([p.id])
-            data["reach"] = reach.get(p.id, 0)
-            return web.json_response(
-                {
-                    "packets": [data],
-                    "active_gateways": await store.get_active_gateway_count(
-                        _active_gateway_window()
-                    ),
-                }
+            data.update(
+                _reach_fields(
+                    p.id,
+                    await store.get_packets_reach([p.id]),
+                    await _active_gateways_by_channel(),
+                )
             )
+            return web.json_response({"packets": [data]})
 
         # --- Parse limit ---
         try:
@@ -364,6 +384,7 @@ async def api_packets(request):
 
         # --- Build JSON output ---
         reach_by_id = await store.get_packets_reach(p.id for p in ui_packets)
+        active_by_channel = await _active_gateways_by_channel()
         packets_data = []
         for p in ui_packets:
             packet_dict = {
@@ -379,7 +400,7 @@ async def api_packets(request):
                 "payload": (p.payload or "").strip(),
                 "payload_size": len(p.raw_payload) if p.raw_payload is not None else 0,
                 "to_long_name": getattr(p.to_node, "long_name", ""),
-                "reach": reach_by_id.get(p.id, 0),
+                **_reach_fields(p.id, reach_by_id, active_by_channel),
             }
 
             reply_id = getattr(
@@ -399,10 +420,7 @@ async def api_packets(request):
                 if p.get("import_time_us") and p["import_time_us"] > 0:
                     latest_import_time = max(latest_import_time or 0, p["import_time_us"])
 
-        response = {
-            "packets": packets_data,
-            "active_gateways": await store.get_active_gateway_count(_active_gateway_window()),
-        }
+        response = {"packets": packets_data}
         if latest_import_time is not None:
             response["latest_import_time"] = latest_import_time
 
@@ -432,11 +450,15 @@ async def api_packets_reach(request):
         )
 
     try:
-        reach = await store.get_packets_reach(packet_ids)
+        reach_by_id = await store.get_packets_reach(packet_ids)
+        active_by_channel = await _active_gateways_by_channel()
         return web.json_response(
             {
-                "reach": {str(packet_id): reach.get(packet_id, 0) for packet_id in packet_ids},
-                "active_gateways": await store.get_active_gateway_count(_active_gateway_window()),
+                "packets": {
+                    str(packet_id): _reach_fields(packet_id, reach_by_id, active_by_channel)
+                    for packet_id in packet_ids
+                    if packet_id in reach_by_id
+                }
             }
         )
     except Exception:

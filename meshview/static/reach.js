@@ -1,6 +1,7 @@
-// Packet reach: the number of distinct gateways that heard a packet,
-// shown against the number of active gateways (reception within the last
-// site.active_gateway_hours).
+// Packet reach: the number of distinct gateways other than the sender that heard
+// a packet, shown against the number of active gateways on the packet's channel
+// (gateways that uplinked another node's packet within site.active_gateway_hours).
+// Both come with each packet from /api/packets as `reach` and `active_gateways`.
 //
 // Markup: <span class="reach" data-packet-id="…" data-import-time-us="…"></span>
 // Pages set window.REACH_TITLE to a translated "{reach} … {active} … {hours}" template
@@ -9,7 +10,7 @@
 // Gateways keep reporting a packet for a while after it first shows up.
 const REACH_REFRESH_WINDOW_US = 5 * 60 * 1_000_000;
 const REACH_MAX_IDS = 100;
-const REACH_TITLE_DEFAULT = "Reach: {reach} of {active} active gateways (last {hours}h)";
+const REACH_TITLE_DEFAULT = "Reach: {reach} of {active} active gateways on the channel (last {hours}h)";
 
 function reachTitle(reach, activeGateways) {
     return (window.REACH_TITLE || REACH_TITLE_DEFAULT)
@@ -18,8 +19,9 @@ function reachTitle(reach, activeGateways) {
         .replace("{hours}", window.REACH_HOURS ?? 2);
 }
 
-function reachHtml(pkt, activeGateways) {
+function reachHtml(pkt) {
     const reach = pkt.reach ?? 0;
+    const activeGateways = pkt.active_gateways;
     return `<span class="reach"
                   data-packet-id="${pkt.id}"
                   data-import-time-us="${pkt.import_time_us || 0}"
@@ -47,8 +49,8 @@ async function refreshRecentReach(root = document) {
         const data = await res.json();
 
         for (const el of elements) {
-            const reach = data.reach?.[el.dataset.packetId];
-            if (reach !== undefined) setReach(el, reach, data.active_gateways);
+            const pkt = data.packets?.[el.dataset.packetId];
+            if (pkt) setReach(el, pkt.reach, pkt.active_gateways);
         }
     } catch (err) {
         console.error("Reach refresh failed:", err);

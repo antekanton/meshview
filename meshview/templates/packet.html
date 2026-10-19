@@ -397,8 +397,8 @@ if (seenSorted.length){
     const reach = p.reach ?? new Set(seenList.map(s => s.node_id)).size;
     const receptions = (packetTranslations.receptions || "{count} receptions")
         .replace("{count}", seenSorted.length);
-    seenCountSpan.textContent = `${reach}/${packetData.active_gateways ?? "?"}`;
-    seenCountSpan.title = `${reachTitle(reach, packetData.active_gateways)}, ${receptions}`;
+    seenCountSpan.textContent = `${reach}/${p.active_gateways ?? "?"}`;
+    seenCountSpan.title = `${reachTitle(reach, p.active_gateways)}, ${receptions}`;
 }
 
 /* ---------------------------------------------

@@ -120,29 +120,49 @@ async def get_packets_seen(packet_id):
 
 
 async def get_packets_reach(packet_ids):
-    """Reach of each packet: the number of distinct gateways that heard it."""
+    """Channel and reach of each known packet, as {packet_id: (channel, reach)}.
+
+    Reach is the number of distinct gateways other than the sender that heard the packet.
+    """
     packet_ids = list(packet_ids)
     if not packet_ids:
         return {}
     async with database.async_session() as session:
         result = await session.execute(
-            select(PacketSeen.packet_id, func.count(func.distinct(PacketSeen.node_id)))
-            .where(PacketSeen.packet_id.in_(packet_ids))
-            .group_by(PacketSeen.packet_id)
+            select(Packet.id, Packet.channel, func.count(func.distinct(PacketSeen.node_id)))
+            .select_from(Packet)
+            .outerjoin(
+                PacketSeen,
+                and_(
+                    PacketSeen.packet_id == Packet.id,
+                    PacketSeen.node_id != Packet.from_node_id,
+                ),
+            )
+            .where(Packet.id.in_(packet_ids))
+            .group_by(Packet.id, Packet.channel)
         )
-        return {packet_id: reach for packet_id, reach in result.all()}
+        return {packet_id: (channel, reach) for packet_id, channel, reach in result.all()}
 
 
-async def get_active_gateway_count(window=timedelta(hours=2)):
-    """Number of gateways with at least one reception within the window."""
+async def get_active_gateways_by_channel(window=timedelta(hours=2)):
+    """Number of active gateways per channel, as {channel: count}.
+
+    A gateway is active on a channel when, within the window, it uplinked at least one
+    packet on that channel sent by another node. Gateways that only uplink their own
+    packets can never hear anyone else, so they don't count.
+    """
     since_us = int((datetime.now(UTC) - window).timestamp() * 1_000_000)
     async with database.async_session() as session:
         result = await session.execute(
-            select(func.count(func.distinct(PacketSeen.node_id))).where(
-                PacketSeen.import_time_us >= since_us
+            select(Packet.channel, func.count(func.distinct(PacketSeen.node_id)))
+            .join(Packet, Packet.id == PacketSeen.packet_id)
+            .where(
+                PacketSeen.import_time_us >= since_us,
+                Packet.from_node_id != PacketSeen.node_id,
             )
+            .group_by(Packet.channel)
         )
-        return result.scalar_one()
+        return {channel: count for channel, count in result.all()}
 
 
 async def has_packets(node_id, portnum):

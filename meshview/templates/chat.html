@@ -94,7 +94,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     const renderedPacketIds = new Set();
     const packetMap = new Map();
     let chatLang = {};
-    let activeGateways = null;
 
     /* ==========================================================
        TRANSLATIONS FOR CHAT PAGE
@@ -219,7 +218,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             </span>
 
             <span class="col-1 reach-col">
-                📡 ${reachHtml(packet, activeGateways)}
+                📡 ${reachHtml(packet)}
             </span>
 
             <span class="col-3 nodename">
@@ -273,7 +272,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
             const resp = await fetch("/api/packets?portnum=1&limit=100");
             const data = await resp.json();
-            activeGateways = data?.active_gateways ?? activeGateways;
             if (data?.packets?.length) renderPacketsEnsureDescending(data.packets);
             lastTime = data?.latest_import_time || lastTime;
         } catch(err){
@@ -288,7 +286,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (lastTime) url.searchParams.set("since", lastTime);
             const resp = await fetch(url);
             const data = await resp.json();
-            activeGateways = data?.active_gateways ?? activeGateways;
             if (data?.packets?.length) renderPacketsEnsureDescending(data.packets, true);
             lastTime = data?.latest_import_time || lastTime;
         } catch(err){
