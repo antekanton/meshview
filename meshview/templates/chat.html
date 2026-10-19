@@ -78,6 +78,7 @@
     <div class="container" id="chat-log"></div>
 </div>
 
+<script src="/static/reach.js"></script>
 <script>
 document.addEventListener("DOMContentLoaded", async () => {
     const chatContainer = document.querySelector("#chat-log");
@@ -88,6 +89,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const renderedPacketIds = new Set();
     const packetMap = new Map();
     let chatLang = {};
+    let activeGateways = null;
 
     /* ==========================================================
        TRANSLATIONS FOR CHAT PAGE
@@ -108,6 +110,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const langCode = cfg?.site?.language || "en";
             const res = await fetch(`/api/lang?lang=${langCode}&section=chat`);
             chatLang = await res.json();
+            if (chatLang.reach_title) window.REACH_TITLE = chatLang.reach_title;
 
             // Apply to existing DOM
             applyTranslations(chatLang);
@@ -205,6 +208,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             </span>
 
             <span class="col-2 channel">
+                📡 ${reachHtml(packet, activeGateways)}
                 <a href="/packet/${packet.id}" title="${chatLang.view_packet_details || 'View details'}">🔎</a>
                 ${escapeHtml(packet.channel || "")}
             </span>
@@ -260,6 +264,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
             const resp = await fetch("/api/packets?portnum=1&limit=100");
             const data = await resp.json();
+            activeGateways = data?.active_gateways ?? activeGateways;
             if (data?.packets?.length) renderPacketsEnsureDescending(data.packets);
             lastTime = data?.latest_import_time || lastTime;
         } catch(err){
@@ -274,6 +279,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (lastTime) url.searchParams.set("since", lastTime);
             const resp = await fetch(url);
             const data = await resp.json();
+            activeGateways = data?.active_gateways ?? activeGateways;
             if (data?.packets?.length) renderPacketsEnsureDescending(data.packets, true);
             lastTime = data?.latest_import_time || lastTime;
         } catch(err){
@@ -295,7 +301,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     await fetchInitial();     // then fetch initial packets
 
-    setInterval(fetchUpdates, 5000);
+    setInterval(async () => {
+        await fetchUpdates();
+        refreshRecentReach(chatContainer);
+    }, 5000);
 });
 </script>
 

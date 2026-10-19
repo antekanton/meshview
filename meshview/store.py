@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 from sqlalchemy import Text, and_, cast, func, or_, select
 from sqlalchemy.orm import lazyload
@@ -117,6 +117,32 @@ async def get_packets_seen(packet_id):
             .order_by(PacketSeen.import_time_us.desc())
         )
         return result.scalars()
+
+
+async def get_packets_reach(packet_ids):
+    """Reach of each packet: the number of distinct gateways that heard it."""
+    packet_ids = list(packet_ids)
+    if not packet_ids:
+        return {}
+    async with database.async_session() as session:
+        result = await session.execute(
+            select(PacketSeen.packet_id, func.count(func.distinct(PacketSeen.node_id)))
+            .where(PacketSeen.packet_id.in_(packet_ids))
+            .group_by(PacketSeen.packet_id)
+        )
+        return {packet_id: reach for packet_id, reach in result.all()}
+
+
+async def get_active_gateway_count(window=timedelta(hours=24)):
+    """Number of gateways with at least one reception within the window."""
+    since_us = int((datetime.now(UTC) - window).timestamp() * 1_000_000)
+    async with database.async_session() as session:
+        result = await session.execute(
+            select(func.count(func.distinct(PacketSeen.node_id))).where(
+                PacketSeen.import_time_us >= since_us
+            )
+        )
+        return result.scalar_one()
 
 
 async def has_packets(node_id, portnum):

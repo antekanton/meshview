@@ -122,6 +122,7 @@
                 <th data-translate-lang="to">To</th>
                 <th data-translate-lang="channel">Channel</th>
                 <th data-translate-lang="port">Port</th>
+                <th data-translate-lang="reach">Reach</th>
             </tr>
         </thead>
         <tbody id="packet_list"></tbody>
@@ -130,6 +131,7 @@
 </div>
 
 <script src="/static/portmaps.js"></script>
+<script src="/static/reach.js"></script>
 <script>
 /* ======================================================
    FIREHOSE TRANSLATION SYSTEM (isolated from base)
@@ -158,6 +160,7 @@ async function loadTranslationsFirehose() {
 
         const res = await fetch(`/api/lang?lang=${lang}&section=firehose`);
         firehoseTranslations = await res.json();
+        if (firehoseTranslations.reach_title) window.REACH_TITLE = firehoseTranslations.reach_title;
 
         applyTranslationsFirehose(firehoseTranslations);
     } catch (err) {
@@ -400,11 +403,12 @@ async function fetchUpdates() {
     <td>${to}</td>
     <td>${pkt.channel || "—"}</td>
     <td>${portLabel(pkt.portnum, pkt.payload, inlineLinks)}</td>
+    <td>${reachHtml(pkt, data.active_gateways)}</td>
 
 </tr>
 
 <tr class="payload-row">
-    <td colspan="6" class="payload-cell">${safePayload}</td>
+    <td colspan="7" class="payload-cell">${safePayload}</td>
 </tr>
 `;
 
@@ -461,7 +465,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     await loadChannels();
 
     fetchUpdates();
-    setInterval(fetchUpdates, updateInterval);
+    setInterval(async () => {
+        await fetchUpdates();
+        if (!updatesPaused) refreshRecentReach(document.getElementById("packet_list"));
+    }, updateInterval);
 });
 </script>
 

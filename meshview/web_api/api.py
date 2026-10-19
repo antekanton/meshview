@@ -261,7 +261,11 @@ async def api_packets(request):
                 "channel": p.channel,
                 "long_name": getattr(p.from_node, "long_name", ""),
             }
-            return web.json_response({"packets": [data]})
+            reach = await store.get_packets_reach([p.id])
+            data["reach"] = reach.get(p.id, 0)
+            return web.json_response(
+                {"packets": [data], "active_gateways": await store.get_active_gateway_count()}
+            )
 
         # --- Parse limit ---
         try:
@@ -338,6 +342,7 @@ async def api_packets(request):
         ui_packets = ui_packets[:limit]
 
         # --- Build JSON output ---
+        reach_by_id = await store.get_packets_reach(p.id for p in ui_packets)
         packets_data = []
         for p in ui_packets:
             packet_dict = {
@@ -353,6 +358,7 @@ async def api_packets(request):
                 "payload": (p.payload or "").strip(),
                 "payload_size": len(p.raw_payload) if p.raw_payload is not None else 0,
                 "to_long_name": getattr(p.to_node, "long_name", ""),
+                "reach": reach_by_id.get(p.id, 0),
             }
 
             reply_id = getattr(
@@ -372,7 +378,10 @@ async def api_packets(request):
                 if p.get("import_time_us") and p["import_time_us"] > 0:
                     latest_import_time = max(latest_import_time or 0, p["import_time_us"])
 
-        response = {"packets": packets_data}
+        response = {
+            "packets": packets_data,
+            "active_gateways": await store.get_active_gateway_count(),
+        }
         if latest_import_time is not None:
             response["latest_import_time"] = latest_import_time
 
@@ -381,6 +390,37 @@ async def api_packets(request):
     except Exception as e:
         logger.error(f"Error in /api/packets: {e}")
         return web.json_response({"error": "Failed to fetch packets"}, status=500)
+
+
+MAX_REACH_IDS = 100
+
+
+@routes.get("/api/packets/reach")
+async def api_packets_reach(request):
+    ids_str = request.query.get("ids", "")
+    try:
+        packet_ids = [int(part) for part in ids_str.split(",") if part.strip()]
+    except ValueError:
+        return web.json_response({"error": "Invalid ids format"}, status=400)
+    if not packet_ids:
+        return web.json_response({"error": "Missing ids"}, status=400)
+    if len(packet_ids) > MAX_REACH_IDS:
+        return web.json_response(
+            {"error": f"Too many ids (max {MAX_REACH_IDS})"},
+            status=400,
+        )
+
+    try:
+        reach = await store.get_packets_reach(packet_ids)
+        return web.json_response(
+            {
+                "reach": {str(packet_id): reach.get(packet_id, 0) for packet_id in packet_ids},
+                "active_gateways": await store.get_active_gateway_count(),
+            }
+        )
+    except Exception:
+        logger.exception("Error in /api/packets/reach")
+        return web.json_response({"error": "Failed to fetch reach"}, status=500)
 
 
 @routes.get("/api/stats")
