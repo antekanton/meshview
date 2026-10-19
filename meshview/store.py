@@ -133,7 +133,7 @@ async def get_packets_reach(packet_ids):
         return {packet_id: reach for packet_id, reach in result.all()}
 
 
-async def get_active_gateway_count(window=timedelta(hours=24)):
+async def get_active_gateway_count(window=timedelta(hours=2)):
     """Number of gateways with at least one reception within the window."""
     since_us = int((datetime.now(UTC) - window).timestamp() * 1_000_000)
     async with database.async_session() as session:

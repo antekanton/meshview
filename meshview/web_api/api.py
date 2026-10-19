@@ -128,6 +128,22 @@ def _get_backup_health() -> dict:
     return backup_health
 
 
+DEFAULT_ACTIVE_GATEWAY_HOURS = 2.0
+
+
+def _active_gateway_window() -> datetime.timedelta:
+    """Window in which a gateway must have a reception to count as active."""
+    try:
+        hours = float(
+            CONFIG.get("site", {}).get("active_gateway_hours", DEFAULT_ACTIVE_GATEWAY_HOURS)
+        )
+    except (TypeError, ValueError):
+        hours = DEFAULT_ACTIVE_GATEWAY_HOURS
+    if hours <= 0:
+        hours = DEFAULT_ACTIVE_GATEWAY_HOURS
+    return datetime.timedelta(hours=hours)
+
+
 def _haversine_km(lat1, lon1, lat2, lon2):
     r = 6371.0
     phi1 = math.radians(lat1)
@@ -264,7 +280,12 @@ async def api_packets(request):
             reach = await store.get_packets_reach([p.id])
             data["reach"] = reach.get(p.id, 0)
             return web.json_response(
-                {"packets": [data], "active_gateways": await store.get_active_gateway_count()}
+                {
+                    "packets": [data],
+                    "active_gateways": await store.get_active_gateway_count(
+                        _active_gateway_window()
+                    ),
+                }
             )
 
         # --- Parse limit ---
@@ -380,7 +401,7 @@ async def api_packets(request):
 
         response = {
             "packets": packets_data,
-            "active_gateways": await store.get_active_gateway_count(),
+            "active_gateways": await store.get_active_gateway_count(_active_gateway_window()),
         }
         if latest_import_time is not None:
             response["latest_import_time"] = latest_import_time
@@ -415,7 +436,7 @@ async def api_packets_reach(request):
         return web.json_response(
             {
                 "reach": {str(packet_id): reach.get(packet_id, 0) for packet_id in packet_ids},
-                "active_gateways": await store.get_active_gateway_count(),
+                "active_gateways": await store.get_active_gateway_count(_active_gateway_window()),
             }
         )
     except Exception:
@@ -768,6 +789,7 @@ async def api_config(request):
             "map_bottom_right_lon": get_float(site, "map_bottom_right_lon", -121.0),
             "map_interval": get_int(site, "map_interval", 3),
             "firehose_interval": get_int(site, "firehose_interval", 3),
+            "active_gateway_hours": _active_gateway_window().total_seconds() / 3600,
             "weekly_net_message": get_str(
                 site, "weekly_net_message", "Weekly Mesh check-in message."
             ),

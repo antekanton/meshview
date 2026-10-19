@@ -1,5 +1,6 @@
 """Packet reach (distinct gateways per packet) and active gateway count."""
 
+import datetime
 import json
 import time
 from types import SimpleNamespace
@@ -65,16 +66,28 @@ async def test_reach_of_no_packets_is_empty(db):
 
 
 @pytest.mark.asyncio
-async def test_active_gateways_ignore_receptions_older_than_24h(db):
+async def test_active_gateways_ignore_receptions_outside_the_window(db):
     await _add_receptions(
         db,
-        (100, 1, 1 * HOUR_US),
-        (100, 1, 2 * HOUR_US),
-        (100, 2, 23 * HOUR_US),
-        (200, 3, 25 * HOUR_US),  # last heard over a day ago
+        (100, 1, HOUR_US // 2),
+        (100, 1, 3 * HOUR_US),
+        (100, 2, HOUR_US),
+        (200, 3, 3 * HOUR_US),  # last heard before the window
     )
 
-    assert await store.get_active_gateway_count() == 2
+    assert await store.get_active_gateway_count(datetime.timedelta(hours=2)) == 2
+    assert await store.get_active_gateway_count(datetime.timedelta(hours=4)) == 3
+
+
+@pytest.mark.parametrize(
+    ("configured", "hours"),
+    [(None, 2), ("6", 6), ("0.5", 0.5), ("0", 2), ("-1", 2), ("soon", 2)],
+)
+def test_active_gateway_window_comes_from_site_config(monkeypatch, configured, hours):
+    site = {} if configured is None else {"active_gateway_hours": configured}
+    monkeypatch.setitem(api.CONFIG, "site", site)
+
+    assert api._active_gateway_window() == datetime.timedelta(hours=hours)
 
 
 @pytest.mark.asyncio

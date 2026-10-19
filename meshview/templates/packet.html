@@ -145,6 +145,7 @@ async function loadTranslationsPacket() {
         const res = await fetch(`/api/lang?lang=${lang}&section=packet`);
         packetTranslations = await res.json();
         if (packetTranslations.reach_title) window.REACH_TITLE = packetTranslations.reach_title;
+        window.REACH_HOURS = cfg?.site?.active_gateway_hours;
         applyTranslationsPacket(packetTranslations);
     } catch (err) {
         console.error("Packet translations failed:", err);

@@ -28,6 +28,11 @@
     font-style: italic;
     color: #bbb;
 }
+.reach-col {
+    color: #bbb;
+    white-space: nowrap;
+}
+
 .channel a {
     font-style: normal;
     color: #999;
@@ -111,6 +116,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const res = await fetch(`/api/lang?lang=${langCode}&section=chat`);
             chatLang = await res.json();
             if (chatLang.reach_title) window.REACH_TITLE = chatLang.reach_title;
+            window.REACH_HOURS = cfg?.site?.active_gateway_hours;
 
             // Apply to existing DOM
             applyTranslations(chatLang);
@@ -208,9 +214,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             </span>
 
             <span class="col-2 channel">
-                📡 ${reachHtml(packet, activeGateways)}
                 <a href="/packet/${packet.id}" title="${chatLang.view_packet_details || 'View details'}">🔎</a>
                 ${escapeHtml(packet.channel || "")}
+            </span>
+
+            <span class="col-1 reach-col">
+                📡 ${reachHtml(packet, activeGateways)}
             </span>
 
             <span class="col-3 nodename">
@@ -219,7 +228,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </a>
             </span>
 
-            <span class="col-5 message">
+            <span class="col-4 message">
                 ${escapeHtml(packet.payload)}${replyHtml}
             </span>
         `;

@@ -50,7 +50,7 @@
   },
 
   "chat": {
-    "reach_title": "Alcance: {reach} de {active} gateways activos (últimas 24 h)",
+    "reach_title": "Alcance: {reach} de {active} gateways activos (últimas {hours} h)",
     "chat_title": "Conversaciones:",
     "replying_to": "Respondiendo a:",
     "view_packet_details": "Ver detalles del paquete",
@@ -177,7 +177,7 @@
 
   "firehose": {
     "reach": "Alcance",
-    "reach_title": "Alcance: {reach} de {active} gateways activos (últimas 24 h)",
+    "reach_title": "Alcance: {reach} de {active} gateways activos (últimas {hours} h)",
     "live_feed": "📡 Flujo en vivo",
     "pause": "Pausar",
     "resume": "Reanudar",
@@ -237,7 +237,7 @@
   },
 
   "packet": {
-    "reach_title": "Alcance: {reach} de {active} gateways activos (últimas 24 h)",
+    "reach_title": "Alcance: {reach} de {active} gateways activos (últimas {hours} h)",
     "receptions": "{count} recepciones",
     "loading": "Cargando información del paquete...",
     "packet_id_label": "ID del Paquete",

@@ -82,7 +82,7 @@ Notes
 - For `portnum=1` (text messages), packets are filtered to remove sequence-only payloads.
 - `latest_import_time` is returned when available for incremental polling (microseconds).
 - `reach` is the number of distinct gateways that heard the packet; several receptions by the same gateway count once.
-- `active_gateways` is the number of distinct gateways with at least one reception in the last 24 hours.
+- `active_gateways` is the number of distinct gateways with at least one reception within the last `site.active_gateway_hours` hours (default `2`).
 
 ### GET `/api/packets/reach`
 Returns the current reach of the given packets. Used to refresh recently received packets, since gateways keep reporting a packet after it first appears.
@@ -278,6 +278,7 @@ Response Example
     "map_bottom_right_lon": -121.0,
     "map_interval": 3,
     "firehose_interval": 3,
+    "active_gateway_hours": 2.0,
     "weekly_net_message": "Weekly Mesh check-in message.",
     "net_tag": "#BayMeshNet",
     "version": "3.0.0"

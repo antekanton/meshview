@@ -1,18 +1,21 @@
 // Packet reach: the number of distinct gateways that heard a packet,
-// shown against the number of active gateways (reception in the last 24h).
+// shown against the number of active gateways (reception within the last
+// site.active_gateway_hours).
 //
 // Markup: <span class="reach" data-packet-id="…" data-import-time-us="…"></span>
-// Pages set window.REACH_TITLE to a translated "{reach} … {active}" template.
+// Pages set window.REACH_TITLE to a translated "{reach} … {active} … {hours}" template
+// and window.REACH_HOURS to site.active_gateway_hours from /api/config.
 
 // Gateways keep reporting a packet for a while after it first shows up.
 const REACH_REFRESH_WINDOW_US = 5 * 60 * 1_000_000;
 const REACH_MAX_IDS = 100;
-const REACH_TITLE_DEFAULT = "Reach: {reach} of {active} active gateways (last 24h)";
+const REACH_TITLE_DEFAULT = "Reach: {reach} of {active} active gateways (last {hours}h)";
 
 function reachTitle(reach, activeGateways) {
     return (window.REACH_TITLE || REACH_TITLE_DEFAULT)
         .replace("{reach}", reach ?? 0)
-        .replace("{active}", activeGateways ?? "?");
+        .replace("{active}", activeGateways ?? "?")
+        .replace("{hours}", window.REACH_HOURS ?? 2);
 }
 
 function reachHtml(pkt, activeGateways) {

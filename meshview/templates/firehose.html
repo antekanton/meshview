@@ -161,6 +161,7 @@ async function loadTranslationsFirehose() {
         const res = await fetch(`/api/lang?lang=${lang}&section=firehose`);
         firehoseTranslations = await res.json();
         if (firehoseTranslations.reach_title) window.REACH_TITLE = firehoseTranslations.reach_title;
+        window.REACH_HOURS = cfg?.site?.active_gateway_hours;
 
         applyTranslationsFirehose(firehoseTranslations);
     } catch (err) {

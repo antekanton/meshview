@@ -45,5 +45,5 @@ The number of distinct gateways that heard a packet, regardless of how many rece
 _Avoid_: seen count, seen by, reception count
 
 **Active gateway**:
-A gateway that produced at least one reception in the last 24 hours. A packet's reach is read against the number of active gateways.
+A gateway that produced at least one reception within the configured activity window (2 hours by default). A packet's reach is read against the number of active gateways.
 _Avoid_: online gateway, known gateway
