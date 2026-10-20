@@ -207,6 +207,8 @@
         "graph": "Graph"
       },
     "node": {
+        "reach": "Reach",
+        "reach_title": "Reach: {reach} of {active} active gateways on the channel (last {hours}h)",
         "specifications": "Specifications",
         "node_id": "Node ID",
         "long_name": "Long Name",

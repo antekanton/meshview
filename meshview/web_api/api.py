@@ -161,9 +161,16 @@ async def _active_gateways_by_channel() -> dict:
 
 
 def _reach_fields(packet_id, reach_by_id, active_by_channel) -> dict:
-    """Reach of a packet and the number of active gateways on its channel."""
-    channel, reach = reach_by_id.get(packet_id, (None, 0))
-    return {"reach": reach, "active_gateways": active_by_channel.get(channel, 0)}
+    """Reach of a packet and the number of active gateways on its channel.
+
+    A sender that uplinked its own packet counts towards both, so reach never exceeds
+    the active gateways even when the sender only ever uplinks its own packets.
+    """
+    channel, reach, self_gateway = reach_by_id.get(packet_id, (None, 0, None))
+    active = active_by_channel.get(channel, set())
+    if self_gateway is not None:
+        active = active | {self_gateway}
+    return {"reach": reach, "active_gateways": len(active)}
 
 
 def _haversine_km(lat1, lon1, lat2, lon2):

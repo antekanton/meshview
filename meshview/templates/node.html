@@ -453,6 +453,7 @@
             <th data-translate-lang="to">To</th>
             <th data-translate-lang="port">Port</th>
             <th data-translate-lang="size">Size</th>
+            <th data-translate-lang="reach">Reach</th>
         </tr>
     </thead>
 
@@ -497,6 +498,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 <script src="/static/portmaps.js"></script>
+<script src="/static/reach.js"></script>
 
 <script>
 
@@ -516,6 +518,8 @@ async function loadTranslationsNode() {
 
         const res = await fetch(`/api/lang?lang=${lang}&section=node`);
         nodeTranslations = await res.json();
+        if (nodeTranslations.reach_title) window.REACH_TITLE = nodeTranslations.reach_title;
+        window.REACH_HOURS = cfg?.site?.active_gateway_hours;
 
         applyTranslationsNode(nodeTranslations);
 
@@ -1095,9 +1099,10 @@ async function loadPackets(filters = {}) {
             <td>${toCell}</td>
             <td>${portLabel(pkt.portnum)}${inlineLinks}</td>
             <td>${sizeBytes.toLocaleString()} B</td>
+            <td>${reachHtml(pkt)}</td>
         </tr>
         <tr class="payload-row">
-            <td colspan="6" class="payload-cell">${safePayload}</td>
+            <td colspan="7" class="payload-cell">${safePayload}</td>
         </tr>`);
 
     }
@@ -1708,7 +1713,7 @@ async function loadNodeStats(nodeId) {
     }
 
     const rows = [
-        ["Time", "Packet ID", "From Node", "To Node", "Port", "Port Name", "Payload"]
+        ["Time", "Packet ID", "From Node", "To Node", "Port", "Port Name", "Reach", "Active Gateways", "Payload"]
     ];
 
     for (const pkt of currentPacketRows) {
@@ -1731,6 +1736,8 @@ async function loadNodeStats(nodeId) {
             pkt.to_node_id,
             pkt.portnum,
             portName,
+            pkt.reach ?? "",
+            pkt.active_gateways ?? "",
             `"${payload}"`
         ]);
     }

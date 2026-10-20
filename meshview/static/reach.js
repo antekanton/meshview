@@ -1,6 +1,7 @@
-// Packet reach: the number of distinct gateways other than the sender that heard
-// a packet, shown against the number of active gateways on the packet's channel
-// (gateways that uplinked another node's packet within site.active_gateway_hours).
+// Packet reach: the number of distinct gateways that heard a packet (the sender too,
+// when it uplinked its own packet), shown against the number of active gateways on the
+// packet's channel (gateways that uplinked another node's packet within
+// site.active_gateway_hours, plus the sender when it uplinked this packet).
 // Both come with each packet from /api/packets as `reach` and `active_gateways`.
 //
 // Markup: <span class="reach" data-packet-id="…" data-import-time-us="…"></span>

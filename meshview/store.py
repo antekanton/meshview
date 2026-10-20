@@ -1,7 +1,7 @@
 import logging
 from datetime import UTC, datetime, timedelta, timezone
 
-from sqlalchemy import Text, and_, cast, func, or_, select
+from sqlalchemy import Text, and_, case, cast, func, or_, select
 from sqlalchemy.orm import lazyload
 
 from meshview import database, models
@@ -120,49 +120,59 @@ async def get_packets_seen(packet_id):
 
 
 async def get_packets_reach(packet_ids):
-    """Channel and reach of each known packet, as {packet_id: (channel, reach)}.
+    """Channel, reach and self-uplink of each known packet.
 
-    Reach is the number of distinct gateways other than the sender that heard the packet.
+    Returns {packet_id: (channel, reach, self_gateway)}. Reach is the number of distinct
+    gateways that heard the packet, the sender included when it uplinked its own packet.
+    self_gateway is the sender's node id when it did, otherwise None.
     """
     packet_ids = list(packet_ids)
     if not packet_ids:
         return {}
+    sender_uplinked = func.max(case((PacketSeen.node_id == Packet.from_node_id, 1), else_=0))
     async with database.async_session() as session:
         result = await session.execute(
-            select(Packet.id, Packet.channel, func.count(func.distinct(PacketSeen.node_id)))
-            .select_from(Packet)
-            .outerjoin(
-                PacketSeen,
-                and_(
-                    PacketSeen.packet_id == Packet.id,
-                    PacketSeen.node_id != Packet.from_node_id,
-                ),
+            select(
+                Packet.id,
+                Packet.channel,
+                Packet.from_node_id,
+                func.count(func.distinct(PacketSeen.node_id)),
+                sender_uplinked,
             )
+            .select_from(Packet)
+            .outerjoin(PacketSeen, PacketSeen.packet_id == Packet.id)
             .where(Packet.id.in_(packet_ids))
-            .group_by(Packet.id, Packet.channel)
+            .group_by(Packet.id, Packet.channel, Packet.from_node_id)
         )
-        return {packet_id: (channel, reach) for packet_id, channel, reach in result.all()}
+        return {
+            packet_id: (channel, reach, from_node_id if uplinked else None)
+            for packet_id, channel, from_node_id, reach, uplinked in result.all()
+        }
 
 
 async def get_active_gateways_by_channel(window=timedelta(hours=2)):
-    """Number of active gateways per channel, as {channel: count}.
+    """Active gateways per channel, as {channel: set of gateway node ids}.
 
     A gateway is active on a channel when, within the window, it uplinked at least one
-    packet on that channel sent by another node. Gateways that only uplink their own
-    packets can never hear anyone else, so they don't count.
+    packet on that channel sent by another node. A gateway that only uplinks its own
+    packets can never hear anyone else, so it isn't active; it is added to the active
+    gateways of its own packets only (see web_api.api._reach_fields).
     """
     since_us = int((datetime.now(UTC) - window).timestamp() * 1_000_000)
     async with database.async_session() as session:
         result = await session.execute(
-            select(Packet.channel, func.count(func.distinct(PacketSeen.node_id)))
+            select(Packet.channel, PacketSeen.node_id)
+            .distinct()
             .join(Packet, Packet.id == PacketSeen.packet_id)
             .where(
                 PacketSeen.import_time_us >= since_us,
                 Packet.from_node_id != PacketSeen.node_id,
             )
-            .group_by(Packet.channel)
         )
-        return {channel: count for channel, count in result.all()}
+        by_channel = {}
+        for channel, node_id in result.all():
+            by_channel.setdefault(channel, set()).add(node_id)
+        return by_channel
 
 
 async def has_packets(node_id, portnum):

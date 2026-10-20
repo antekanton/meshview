@@ -188,6 +188,8 @@
         "graph": "Диаграмма"
     },
     "node": {
+        "reach": "Охват",
+        "reach_title": "Охват: {reach} из {active} активных шлюзов канала (за {hours} ч)",
         "specifications": "Технические характеристики",
         "node_id": "ID ноды",
         "long_name": "Длинное имя",

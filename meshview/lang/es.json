@@ -193,6 +193,8 @@
   },
 
   "node": {
+    "reach": "Alcance",
+    "reach_title": "Alcance: {reach} de {active} gateways activos del canal (últimas {hours} h)",
     "specifications": "Especificaciones",
     "node_id": "ID de Nodo",
     "long_name": "Nombre Largo",

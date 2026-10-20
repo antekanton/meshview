@@ -62,7 +62,7 @@ async def _add_receptions(session_factory, *receptions):
 
 
 @pytest.mark.asyncio
-async def test_reach_counts_each_gateway_once_and_skips_the_sender(db):
+async def test_reach_counts_each_gateway_once_including_the_sender(db):
     await _add_packets(db, (100, SENDER, "LongFast"), (200, SENDER, "LongFast"))
     await _add_receptions(
         db,
@@ -74,8 +74,8 @@ async def test_reach_counts_each_gateway_once_and_skips_the_sender(db):
     )
 
     assert await store.get_packets_reach([100, 200, 300]) == {
-        100: ("LongFast", 2),
-        200: ("LongFast", 1),
+        100: ("LongFast", 3, SENDER),
+        200: ("LongFast", 1, None),
     }
 
 
@@ -83,7 +83,7 @@ async def test_reach_counts_each_gateway_once_and_skips_the_sender(db):
 async def test_reach_of_unheard_packet_is_zero(db):
     await _add_packets(db, (100, SENDER, "LongFast"))
 
-    assert await store.get_packets_reach([100]) == {100: ("LongFast", 0)}
+    assert await store.get_packets_reach([100]) == {100: ("LongFast", 0, None)}
     assert await store.get_packets_reach([]) == {}
 
 
@@ -99,9 +99,15 @@ async def test_active_gateways_are_counted_per_channel_within_the_window(db):
     )
 
     window = datetime.timedelta(hours=2)
-    assert await store.get_active_gateways_by_channel(window) == {"LongFast": 2, "MediumFast": 1}
+    assert await store.get_active_gateways_by_channel(window) == {
+        "LongFast": {1, 2},
+        "MediumFast": {4},
+    }
     window = datetime.timedelta(hours=4)
-    assert await store.get_active_gateways_by_channel(window) == {"LongFast": 3, "MediumFast": 1}
+    assert await store.get_active_gateways_by_channel(window) == {
+        "LongFast": {1, 2, 3},
+        "MediumFast": {4},
+    }
 
 
 @pytest.mark.asyncio
@@ -114,7 +120,7 @@ async def test_gateway_uplinking_only_its_own_packets_is_not_active(db):
     )
 
     window = datetime.timedelta(hours=2)
-    assert await store.get_active_gateways_by_channel(window) == {"LongFast": 1}
+    assert await store.get_active_gateways_by_channel(window) == {"LongFast": {1}}
 
 
 @pytest.mark.parametrize(
@@ -154,18 +160,50 @@ async def test_reach_endpoint_returns_reach_and_channel_active_gateways(db):
 
 
 @pytest.mark.asyncio
+async def test_sender_uplinking_its_own_packet_counts_in_reach_and_active_gateways(db):
+    await _add_packets(
+        db,
+        (100, 7, "LongFast"),  # node 7 only ever uplinks what it sent itself
+        (200, 8, "LongFast"),  # node 8 is also an active gateway for others
+        (300, SENDER, "LongFast"),
+        (400, 7, "LongFast"),  # heard by others, but not uplinked by node 7
+    )
+    await _add_receptions(
+        db,
+        (100, 7, "LongFast", 0),
+        (100, 1, "LongFast", 0),
+        (200, 8, "LongFast", 0),
+        (200, 1, "LongFast", 0),
+        (300, 8, "LongFast", 0),
+        (400, 1, "LongFast", 0),
+    )
+
+    response = await api.api_packets_reach(SimpleNamespace(query={"ids": "100,200,300,400"}))
+
+    # Active gateways on LongFast are 1 and 8; node 7 is added for its own packet only.
+    assert json.loads(response.text) == {
+        "packets": {
+            "100": {"reach": 2, "active_gateways": 3},
+            "200": {"reach": 2, "active_gateways": 2},
+            "300": {"reach": 1, "active_gateways": 2},
+            "400": {"reach": 1, "active_gateways": 2},
+        }
+    }
+
+
+@pytest.mark.asyncio
 async def test_active_gateways_are_cached_between_polls(db, monkeypatch):
     calls = 0
 
     async def counting(window):
         nonlocal calls
         calls += 1
-        return {"LongFast": 5}
+        return {"LongFast": {1, 2}}
 
     monkeypatch.setattr(store, "get_active_gateways_by_channel", counting)
 
-    assert await api._active_gateways_by_channel() == {"LongFast": 5}
-    assert await api._active_gateways_by_channel() == {"LongFast": 5}
+    assert await api._active_gateways_by_channel() == {"LongFast": {1, 2}}
+    assert await api._active_gateways_by_channel() == {"LongFast": {1, 2}}
     assert calls == 1
 
 
