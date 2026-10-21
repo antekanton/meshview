@@ -2,8 +2,10 @@
 
 {% block css %}
 .timestamp {
-    min-width: 10em;
     color: #ccc;
+}
+@media (min-width: 992px) {
+    .timestamp { min-width: 10em; }
 }
 
 .chat-packet:nth-of-type(odd) { background-color: #3a3a3a; }
@@ -15,7 +17,7 @@
 }
 
 /* Same column spacing as before */
-.chat-packet > [class^="col-"] {
+.chat-packet > [class*="col"] {
     padding-left: 10px !important;
     padding-right: 10px !important;
     padding-top: 1px !important;
@@ -31,6 +33,10 @@
 .reach-col {
     color: #bbb;
     white-space: nowrap;
+}
+@media (min-width: 992px) {
+    /* Fixed width keeps the message column aligned across rows */
+    .chat-packet > .reach-col { width: 8em; }
 }
 
 .channel a {
@@ -208,26 +214,26 @@ document.addEventListener("DOMContentLoaded", async () => {
         div.dataset.packetId = packet.id;
 
         div.innerHTML = `
-            <span class="col-2 timestamp" title="${packet.import_time_us}">
+            <span class="col-auto col-lg-2 timestamp" title="${packet.import_time_us}">
                 ${formattedTimestamp}
             </span>
 
-            <span class="col-2 channel">
+            <span class="col-auto col-lg-2 channel">
                 <a href="/packet/${packet.id}" title="${chatLang.view_packet_details || 'View details'}">🔎</a>
                 ${escapeHtml(packet.channel || "")}
             </span>
 
-            <span class="col-1 reach-col">
+            <span class="col-auto reach-col">
                 📡 ${reachHtml(packet)}
             </span>
 
-            <span class="col-3 nodename">
+            <span class="col col-lg-3 nodename">
                 <a href="/node/${packet.from_node_id}">
                     ${escapeHtml((packet.long_name || "").trim() || `Node ${packet.from_node_id}`)}
                 </a>
             </span>
 
-            <span class="col-4 message">
+            <span class="col-12 col-lg message">
                 ${escapeHtml(packet.payload)}${replyHtml}
             </span>
         `;
