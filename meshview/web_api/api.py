@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import os
+import time
 
 from aiohttp import web
 from sqlalchemy import func, select
@@ -126,6 +127,50 @@ def _get_backup_health() -> dict:
     backup_health["status"] = last_run.get("status", backup_health["status"])
     backup_health["last_run"] = last_run
     return backup_health
+
+
+DEFAULT_ACTIVE_GATEWAY_HOURS = 2.0
+
+
+def _active_gateway_window() -> datetime.timedelta:
+    """Window in which a gateway must have a reception to count as active."""
+    try:
+        hours = float(
+            CONFIG.get("site", {}).get("active_gateway_hours", DEFAULT_ACTIVE_GATEWAY_HOURS)
+        )
+    except (TypeError, ValueError):
+        hours = DEFAULT_ACTIVE_GATEWAY_HOURS
+    if hours <= 0:
+        hours = DEFAULT_ACTIVE_GATEWAY_HOURS
+    return datetime.timedelta(hours=hours)
+
+
+# Every firehose/chat poll needs the active gateway counts, which change slowly.
+ACTIVE_GATEWAYS_CACHE_SECONDS = 30
+_active_gateways_cache = {"expires": 0.0, "by_channel": {}}
+
+
+async def _active_gateways_by_channel() -> dict:
+    now = time.monotonic()
+    if now >= _active_gateways_cache["expires"]:
+        _active_gateways_cache["by_channel"] = await store.get_active_gateways_by_channel(
+            _active_gateway_window()
+        )
+        _active_gateways_cache["expires"] = now + ACTIVE_GATEWAYS_CACHE_SECONDS
+    return _active_gateways_cache["by_channel"]
+
+
+def _reach_fields(packet_id, reach_by_id, active_by_channel) -> dict:
+    """Reach of a packet and the number of active gateways on its channel.
+
+    A sender that uplinked its own packet counts towards both, so reach never exceeds
+    the active gateways even when the sender only ever uplinks its own packets.
+    """
+    channel, reach, self_gateway = reach_by_id.get(packet_id, (None, 0, None))
+    active = active_by_channel.get(channel, set())
+    if self_gateway is not None:
+        active = active | {self_gateway}
+    return {"reach": reach, "active_gateways": len(active)}
 
 
 def _haversine_km(lat1, lon1, lat2, lon2):
@@ -261,6 +306,13 @@ async def api_packets(request):
                 "channel": p.channel,
                 "long_name": getattr(p.from_node, "long_name", ""),
             }
+            data.update(
+                _reach_fields(
+                    p.id,
+                    await store.get_packets_reach([p.id]),
+                    await _active_gateways_by_channel(),
+                )
+            )
             return web.json_response({"packets": [data]})
 
         # --- Parse limit ---
@@ -338,6 +390,8 @@ async def api_packets(request):
         ui_packets = ui_packets[:limit]
 
         # --- Build JSON output ---
+        reach_by_id = await store.get_packets_reach(p.id for p in ui_packets)
+        active_by_channel = await _active_gateways_by_channel()
         packets_data = []
         for p in ui_packets:
             packet_dict = {
@@ -353,6 +407,7 @@ async def api_packets(request):
                 "payload": (p.payload or "").strip(),
                 "payload_size": len(p.raw_payload) if p.raw_payload is not None else 0,
                 "to_long_name": getattr(p.to_node, "long_name", ""),
+                **_reach_fields(p.id, reach_by_id, active_by_channel),
             }
 
             reply_id = getattr(
@@ -381,6 +436,41 @@ async def api_packets(request):
     except Exception as e:
         logger.error(f"Error in /api/packets: {e}")
         return web.json_response({"error": "Failed to fetch packets"}, status=500)
+
+
+MAX_REACH_IDS = 100
+
+
+@routes.get("/api/packets/reach")
+async def api_packets_reach(request):
+    ids_str = request.query.get("ids", "")
+    try:
+        packet_ids = [int(part) for part in ids_str.split(",") if part.strip()]
+    except ValueError:
+        return web.json_response({"error": "Invalid ids format"}, status=400)
+    if not packet_ids:
+        return web.json_response({"error": "Missing ids"}, status=400)
+    if len(packet_ids) > MAX_REACH_IDS:
+        return web.json_response(
+            {"error": f"Too many ids (max {MAX_REACH_IDS})"},
+            status=400,
+        )
+
+    try:
+        reach_by_id = await store.get_packets_reach(packet_ids)
+        active_by_channel = await _active_gateways_by_channel()
+        return web.json_response(
+            {
+                "packets": {
+                    str(packet_id): _reach_fields(packet_id, reach_by_id, active_by_channel)
+                    for packet_id in packet_ids
+                    if packet_id in reach_by_id
+                }
+            }
+        )
+    except Exception:
+        logger.exception("Error in /api/packets/reach")
+        return web.json_response({"error": "Failed to fetch reach"}, status=500)
 
 
 @routes.get("/api/stats")
@@ -728,6 +818,7 @@ async def api_config(request):
             "map_bottom_right_lon": get_float(site, "map_bottom_right_lon", -121.0),
             "map_interval": get_int(site, "map_interval", 3),
             "firehose_interval": get_int(site, "firehose_interval", 3),
+            "active_gateway_hours": _active_gateway_window().total_seconds() / 3600,
             "weekly_net_message": get_str(
                 site, "weekly_net_message", "Weekly Mesh check-in message."
             ),

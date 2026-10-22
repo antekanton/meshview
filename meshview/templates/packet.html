@@ -4,6 +4,7 @@
 
 {% block head %}
 <script src="/static/portmaps.js"></script>
+<script src="/static/reach.js"></script>
 {% endblock %}
 
 {% block css %}
@@ -143,6 +144,8 @@ async function loadTranslationsPacket() {
         const lang = cfg?.site?.language || "en";
         const res = await fetch(`/api/lang?lang=${lang}&section=packet`);
         packetTranslations = await res.json();
+        if (packetTranslations.reach_title) window.REACH_TITLE = packetTranslations.reach_title;
+        window.REACH_HOURS = cfg?.site?.active_gateway_hours;
         applyTranslationsPacket(packetTranslations);
     } catch (err) {
         console.error("Packet translations failed:", err);
@@ -391,7 +394,11 @@ const seenSorted = seenList.slice().sort((a,b)=>{
 
 if (seenSorted.length){
     seenContainer.classList.remove("d-none");
-    seenCountSpan.textContent = `(${seenSorted.length})`;
+    const reach = p.reach ?? new Set(seenList.map(s => s.node_id)).size;
+    const receptions = (packetTranslations.receptions || "{count} receptions")
+        .replace("{count}", seenSorted.length);
+    seenCountSpan.textContent = `${reach}/${p.active_gateways ?? "?"}`;
+    seenCountSpan.title = `${reachTitle(reach, p.active_gateways)}, ${receptions}`;
 }
 
 /* ---------------------------------------------

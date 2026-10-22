@@ -50,6 +50,7 @@
   },
 
   "chat": {
+    "reach_title": "Alcance: {reach} de {active} gateways activos del canal (últimas {hours} h)",
     "chat_title": "Conversaciones:",
     "replying_to": "Respondiendo a:",
     "view_packet_details": "Ver detalles del paquete",
@@ -175,6 +176,8 @@
   },
 
   "firehose": {
+    "reach": "Alcance",
+    "reach_title": "Alcance: {reach} de {active} gateways activos del canal (últimas {hours} h)",
     "live_feed": "📡 Flujo en vivo",
     "pause": "Pausar",
     "resume": "Reanudar",
@@ -190,6 +193,8 @@
   },
 
   "node": {
+    "reach": "Alcance",
+    "reach_title": "Alcance: {reach} de {active} gateways activos del canal (últimas {hours} h)",
     "specifications": "Especificaciones",
     "node_id": "ID de Nodo",
     "long_name": "Nombre Largo",
@@ -234,6 +239,8 @@
   },
 
   "packet": {
+    "reach_title": "Alcance: {reach} de {active} gateways activos del canal (últimas {hours} h)",
+    "receptions": "{count} recepciones",
     "loading": "Cargando información del paquete...",
     "packet_id_label": "ID del Paquete",
     "from_node": "De",

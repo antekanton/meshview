@@ -49,6 +49,7 @@
       }
       },
    "chat": {
+     "reach_title": "Reach: {reach} of {active} active gateways on the channel (last {hours}h)",
      "chat_title": "Chats:",
         "replying_to": "Replying to:",
         "view_packet_details": "View packet details",
@@ -176,6 +177,8 @@
     },
     "firehose":
       {
+        "reach": "Reach",
+        "reach_title": "Reach: {reach} of {active} active gateways on the channel (last {hours}h)",
         "live_feed": "📡 Live Feed",
         "pause": "Pause",
         "resume": "Resume",
@@ -204,6 +207,8 @@
         "graph": "Graph"
       },
     "node": {
+        "reach": "Reach",
+        "reach_title": "Reach: {reach} of {active} active gateways on the channel (last {hours}h)",
         "specifications": "Specifications",
         "node_id": "Node ID",
         "long_name": "Long Name",
@@ -247,6 +252,8 @@
         "scan_qr_to_add": "Scan this QR code to add this node as a contact on another device."
     },
     "packet": {
+      "reach_title": "Reach: {reach} of {active} active gateways on the channel (last {hours}h)",
+      "receptions": "{count} receptions",
       "loading": "Loading packet information...",
       "packet_id_label": "Packet ID",
       "from_node": "From Node",

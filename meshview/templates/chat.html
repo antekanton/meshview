@@ -2,8 +2,10 @@
 
 {% block css %}
 .timestamp {
-    min-width: 10em;
     color: #ccc;
+}
+@media (min-width: 992px) {
+    .timestamp { min-width: 10em; }
 }
 
 .chat-packet:nth-of-type(odd) { background-color: #3a3a3a; }
@@ -15,7 +17,7 @@
 }
 
 /* Same column spacing as before */
-.chat-packet > [class^="col-"] {
+.chat-packet > [class*="col"] {
     padding-left: 10px !important;
     padding-right: 10px !important;
     padding-top: 1px !important;
@@ -28,6 +30,15 @@
     font-style: italic;
     color: #bbb;
 }
+.reach-col {
+    color: #bbb;
+    white-space: nowrap;
+}
+@media (min-width: 992px) {
+    /* Fixed width keeps the message column aligned across rows */
+    .chat-packet > .reach-col { width: 8em; }
+}
+
 .channel a {
     font-style: normal;
     color: #999;
@@ -78,6 +89,7 @@
     <div class="container" id="chat-log"></div>
 </div>
 
+<script src="/static/reach.js"></script>
 <script>
 document.addEventListener("DOMContentLoaded", async () => {
     const chatContainer = document.querySelector("#chat-log");
@@ -108,6 +120,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             const langCode = cfg?.site?.language || "en";
             const res = await fetch(`/api/lang?lang=${langCode}&section=chat`);
             chatLang = await res.json();
+            if (chatLang.reach_title) window.REACH_TITLE = chatLang.reach_title;
+            window.REACH_HOURS = cfg?.site?.active_gateway_hours;
 
             // Apply to existing DOM
             applyTranslations(chatLang);
@@ -200,22 +214,26 @@ document.addEventListener("DOMContentLoaded", async () => {
         div.dataset.packetId = packet.id;
 
         div.innerHTML = `
-            <span class="col-2 timestamp" title="${packet.import_time_us}">
+            <span class="col-auto col-lg-2 timestamp" title="${packet.import_time_us}">
                 ${formattedTimestamp}
             </span>
 
-            <span class="col-2 channel">
+            <span class="col-auto col-lg-2 channel">
                 <a href="/packet/${packet.id}" title="${chatLang.view_packet_details || 'View details'}">🔎</a>
                 ${escapeHtml(packet.channel || "")}
             </span>
 
-            <span class="col-3 nodename">
+            <span class="col-auto reach-col">
+                📡 ${reachHtml(packet)}
+            </span>
+
+            <span class="col col-lg-3 nodename">
                 <a href="/node/${packet.from_node_id}">
                     ${escapeHtml((packet.long_name || "").trim() || `Node ${packet.from_node_id}`)}
                 </a>
             </span>
 
-            <span class="col-5 message">
+            <span class="col-12 col-lg message">
                 ${escapeHtml(packet.payload)}${replyHtml}
             </span>
         `;
@@ -295,7 +313,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     await fetchInitial();     // then fetch initial packets
 
-    setInterval(fetchUpdates, 5000);
+    setInterval(async () => {
+        await fetchUpdates();
+        refreshRecentReach(chatContainer);
+    }, 5000);
 });
 </script>
 
