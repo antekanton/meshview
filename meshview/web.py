@@ -369,6 +369,20 @@ async def traceroute_page(request):
     )
 
 
+def _gateway_hops(packet_seen):
+    """Hops the packet had taken when the gateway heard it, or None if unknown.
+
+    Old firmware leaves hop_start at 0, so that counts as unknown too.
+    """
+    if packet_seen is None:
+        return None
+    hop_start = packet_seen.hop_start
+    hop_limit = packet_seen.hop_limit
+    if not hop_start or hop_limit is None or hop_limit > hop_start:
+        return None
+    return hop_start - hop_limit
+
+
 # Keep !!
 @routes.get("/graph/traceroute/{packet_id}")
 async def graph_traceroute(request):
@@ -457,6 +471,11 @@ async def graph_traceroute(request):
             node_name = (
                 f'[{node.short_name}] {node.long_name}\n{node_id_to_hex(node_id)}\n{node.role}'
             )
+
+        if node_id in mqtt_nodes and node_id != packet.from_node_id:
+            hops = _gateway_hops(packets_seen_by_gateway_id.get(node_id))
+            if hops is not None:
+                node_name += f'\n hop: {hops}'
 
         style = 'dashed'
         if node_id == dest:

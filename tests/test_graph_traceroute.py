@@ -1,5 +1,6 @@
 """graph_traceroute draws the forward path for a traceroute request and the
-return path for a traceroute response, labelling edges with SNR."""
+return path for a traceroute response, labelling edges with SNR and gateway
+nodes with the hop count at which they heard the packet."""
 
 from types import SimpleNamespace
 
@@ -20,7 +21,11 @@ def _route(**fields):
     return RouteDiscovery(**fields).SerializeToString()
 
 
-async def _render(monkeypatch, packet, traceroutes, packets_seen):
+def _seen(node_id, rx_snr, hop_start=None, hop_limit=None):
+    return SimpleNamespace(node_id=node_id, rx_snr=rx_snr, hop_start=hop_start, hop_limit=hop_limit)
+
+
+async def _render_graph(monkeypatch, packet, traceroutes, packets_seen):
     async def get_traceroute(packet_id):
         return traceroutes
 
@@ -49,11 +54,20 @@ async def _render(monkeypatch, packet, traceroutes, packets_seen):
     request = SimpleNamespace(match_info={"packet_id": "42"})
     response = await web.graph_traceroute(request)
     assert response.status == 200
+    return rendered["graph"]
 
+
+async def _render(monkeypatch, packet, traceroutes, packets_seen):
+    graph = await _render_graph(monkeypatch, packet, traceroutes, packets_seen)
     return {
         (int(e.get_source()), int(e.get_destination())): (e.get("label") or "").strip('"')
-        for e in rendered["graph"].get_edges()
+        for e in graph.get_edges()
     }
+
+
+async def _node_labels(monkeypatch, packet, traceroutes, packets_seen):
+    graph = await _render_graph(monkeypatch, packet, traceroutes, packets_seen)
+    return {int(n.get_name()): (n.get("label") or "").strip('"') for n in graph.get_nodes()}
 
 
 @pytest.mark.asyncio
@@ -67,7 +81,7 @@ async def test_request_draws_forward_path_to_gateway(monkeypatch):
             import_time_us=1,
         )
     ]
-    packets_seen = [SimpleNamespace(node_id=GATEWAY, rx_snr=7.25)]
+    packets_seen = [_seen(GATEWAY, 7.25)]
 
     edges = await _render(monkeypatch, packet, traceroutes, packets_seen)
 
@@ -94,7 +108,7 @@ async def test_response_draws_return_path_from_target(monkeypatch):
             import_time_us=1,
         )
     ]
-    packets_seen = [SimpleNamespace(node_id=GATEWAY, rx_snr=-2.5)]
+    packets_seen = [_seen(GATEWAY, -2.5)]
 
     edges = await _render(monkeypatch, packet, traceroutes, packets_seen)
 
@@ -127,3 +141,71 @@ async def test_response_heard_by_initiator_ends_at_initiator(monkeypatch):
         (TARGET, HOP_BACK): "5.00dB",
         (HOP_BACK, INITIATOR): "6.00dB",
     }
+
+
+def _request_heard_by_gateway():
+    packet = SimpleNamespace(from_node_id=INITIATOR, to_node_id=TARGET)
+    traceroutes = [
+        SimpleNamespace(
+            route=_route(route=[HOP_TOWARDS], snr_towards=[12]),
+            done=False,
+            gateway_node_id=GATEWAY,
+            import_time_us=1,
+        )
+    ]
+    return packet, traceroutes
+
+
+@pytest.mark.asyncio
+async def test_gateway_node_shows_hop_count(monkeypatch):
+    packet, traceroutes = _request_heard_by_gateway()
+    packets_seen = [_seen(GATEWAY, 7.25, hop_start=3, hop_limit=1)]
+
+    labels = await _node_labels(monkeypatch, packet, traceroutes, packets_seen)
+
+    assert "hop: 2" in labels[GATEWAY]
+    assert "hop:" not in labels[INITIATOR]
+    assert "hop:" not in labels[HOP_TOWARDS]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("hop_start", "hop_limit"),
+    [(None, 1), (3, None), (0, 0), (None, None), (1, 3)],
+)
+async def test_gateway_node_without_hop_data_has_no_hop_label(monkeypatch, hop_start, hop_limit):
+    packet, traceroutes = _request_heard_by_gateway()
+    packets_seen = [_seen(GATEWAY, 7.25, hop_start=hop_start, hop_limit=hop_limit)]
+
+    labels = await _node_labels(monkeypatch, packet, traceroutes, packets_seen)
+
+    assert "hop:" not in labels[GATEWAY]
+
+
+@pytest.mark.asyncio
+async def test_initiator_heard_as_gateway_has_no_hop_label(monkeypatch):
+    # The packet's own sender uplinking it is not a hop-counted gateway.
+    packet = SimpleNamespace(from_node_id=INITIATOR, to_node_id=TARGET)
+    traceroutes = [
+        SimpleNamespace(
+            route=_route(route=[], snr_towards=[]),
+            done=False,
+            gateway_node_id=INITIATOR,
+            import_time_us=1,
+        ),
+        SimpleNamespace(
+            route=_route(route=[HOP_TOWARDS], snr_towards=[12]),
+            done=False,
+            gateway_node_id=GATEWAY,
+            import_time_us=2,
+        ),
+    ]
+    packets_seen = [
+        _seen(INITIATOR, 9.0, hop_start=3, hop_limit=3),
+        _seen(GATEWAY, 7.25, hop_start=3, hop_limit=2),
+    ]
+
+    labels = await _node_labels(monkeypatch, packet, traceroutes, packets_seen)
+
+    assert "hop:" not in labels[INITIATOR]
+    assert "hop: 1" in labels[GATEWAY]
