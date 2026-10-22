@@ -257,28 +257,13 @@ async def test_shared_segment_gets_one_edge_per_path(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_legend_lists_each_path_shortest_first(monkeypatch):
+async def test_legend_names_border_styles_only(monkeypatch):
     graph = await _render_graph(monkeypatch, *_two_gateways_sharing_a_hop())
     label = _legend_label(graph)
 
-    first, second = web.TRACEROUTE_PATH_COLORS[:2]
-    assert f'BGCOLOR="{first}"></TD><TD ALIGN="LEFT" >!00000005 — 2 hops' in label
-    assert f'BGCOLOR="{second}"></TD><TD ALIGN="LEFT" >!00000004 — 3 hops' in label
-    assert "Arrows follow the forward path" in label
-
-
-@pytest.mark.asyncio
-async def test_legend_names_return_direction_for_responses(monkeypatch):
-    packet = SimpleNamespace(from_node_id=TARGET, to_node_id=INITIATOR)
-    traceroutes = [
-        SimpleNamespace(
-            route=_route(route=[HOP_TOWARDS], route_back=[HOP_BACK]),
-            done=True,
-            gateway_node_id=GATEWAY,
-            import_time_us=1,
-        )
+    assert [name for name in ("target", "gateway", "relay") if f">{name}</TD>" in label] == [
+        "target",
+        "gateway",
+        "relay",
     ]
-
-    graph = await _render_graph(monkeypatch, packet, traceroutes, [])
-
-    assert "Arrows follow the return path" in _legend_label(graph)
+    assert "!0000000" not in label

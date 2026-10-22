@@ -2,7 +2,6 @@
 
 import asyncio
 import datetime
-import html
 import logging
 import os
 import pathlib
@@ -409,42 +408,18 @@ def _short_node_name(nodes, node_id):
     return hex_id
 
 
-def _traceroute_legend(path_rows, is_route_back):
-    """Legend node for the traceroute graph; path_rows are (colour, gateway name, hops)."""
-
-    def sample(attrs=""):
-        return f'<TD BORDER="1" WIDTH="28" HEIGHT="14" {attrs}></TD>'
-
-    def text(value, attrs=""):
-        return f'<TD ALIGN="LEFT" {attrs}>{html.escape(value)}</TD>'
-
-    def row(*cells):
-        return "<TR>" + "".join(cells) + "</TR>"
-
-    wide = 'COLSPAN="2"'
-    direction = "return path (from the target)" if is_route_back else "forward path"
-    rows = [
-        row(f'<TD ALIGN="LEFT" {wide}><B>Legend</B></TD>'),
-        row(sample('BGCOLOR="#bbbbbb"'), text("Target, reached (filled in its path colour)")),
-        row(sample(), text("Gateway in any observation (outlined in its path colour)")),
-        row(sample('STYLE="dashed"'), text("Relay")),
-        row(text("-3.25dB"), text("SNR of that hop")),
-        row(text("hop: N"), text("Hops taken when the gateway heard it")),
-        row(text("!1a2b3c4d"), text("Node not in the database")),
-        row(text("Arrows follow the " + direction, wide)),
-    ]
-    if path_rows:
-        rows.append(row(f'<TD ALIGN="LEFT" {wide}><B>Paths, by reporting gateway</B></TD>'))
-        for color, gateway, hops in path_rows:
-            label = f"{gateway} — {hops} hop{'' if hops == 1 else 's'}"
-            rows.append(row(sample(f'BGCOLOR="{color}"'), text(label)))
-
-    table = (
-        '<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="4" CELLPADDING="2">'
-        + "".join(rows)
-        + "</TABLE>"
+def _traceroute_legend():
+    """Legend node explaining the node border styles of the traceroute graph."""
+    rows = "".join(
+        f'<TR><TD BORDER="1" WIDTH="22" HEIGHT="12" {attrs}></TD><TD ALIGN="LEFT">{name}</TD></TR>'
+        for attrs, name in (
+            ('BGCOLOR="#bbbbbb"', "target"),
+            ("", "gateway"),
+            ('STYLE="dashed"', "relay"),
+        )
     )
-    return pydot.Node("legend", label=f"<{table}>", shape="plaintext")
+    table = f'<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="3">{rows}</TABLE>'
+    return pydot.Node("legend", label=f"<{table}>", shape="plaintext", fontsize="11")
 
 
 # Keep !!
@@ -485,6 +460,8 @@ async def graph_traceroute(request):
             nodes[node_id] = tg.create_task(store.get_node(node_id))
 
     graph = pydot.Dot('traceroute', graph_type="digraph")
+    # Added first so graphviz places it in the top-left corner.
+    graph.add_node(_traceroute_legend())
 
     # SNR labels for each edge of each path, in path order; None when not fully known.
     path_snr = {}
@@ -570,11 +547,6 @@ async def graph_traceroute(request):
         for i, (src, dst) in enumerate(zip(path, path[1:], strict=False)):
             label = snr[i] if snr else ""
             graph.add_edge(pydot.Edge(src, dst, color=path_color[path], label=label))
-
-    legend_rows = [
-        (path_color[path], _short_node_name(nodes, path[-1]), len(path) - 1) for path in paths
-    ]
-    graph.add_node(_traceroute_legend(legend_rows, is_route_back))
 
     return web.Response(
         body=graph.create_svg(),
