@@ -67,6 +67,12 @@ RUN apt-get update && \
   mv /app/sample.config.ini /etc/meshview/config.ini && \
   chown -R ${APP_USER}:${APP_USER} /var/lib/meshview /var/log/meshview
 
+# Release tag and commit, shown in the footer and /version (empty for local builds)
+ARG MESHVIEW_VERSION=""
+ARG MESHVIEW_REVISION=""
+ENV MESHVIEW_VERSION=${MESHVIEW_VERSION} \
+    MESHVIEW_REVISION=${MESHVIEW_REVISION}
+
 # Drop privileges
 USER ${APP_USER}
 

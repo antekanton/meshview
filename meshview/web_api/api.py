@@ -824,6 +824,7 @@ async def api_config(request):
             ),
             "net_tag": get_str(site, "net_tag", "#BayMeshNet"),
             "version": str(__version__),
+            "git_revision": _git_revision_short,
         }
 
         # ------------------ MQTT ------------------

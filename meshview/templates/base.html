@@ -183,7 +183,8 @@ async function initializePage() {
 
         // Version
         document.getElementById("site-version").textContent =
-            "ver. " + (site.version || "unknown");
+            "ver. " + (site.version || "unknown") +
+            (site.git_revision && site.git_revision !== "unknown" ? ` (${site.git_revision})` : "");
 
         // Apply translations
         applyTranslations(dict);
