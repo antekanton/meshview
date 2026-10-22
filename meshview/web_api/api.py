@@ -295,7 +295,7 @@ async def api_packets(request):
             p = Packet.from_model(packet)
             data = {
                 "id": p.id,
-                "storage_id": p.id,
+                "storage_id": str(p.id),  # string: map-report ids exceed JS safe ints
                 "packet_id": p.packet_id,
                 "from_node_id": p.from_node_id,
                 "to_node_id": p.to_node_id,
@@ -396,7 +396,7 @@ async def api_packets(request):
         for p in ui_packets:
             packet_dict = {
                 "id": p.id,
-                "storage_id": p.id,
+                "storage_id": str(p.id),  # string: map-report ids exceed JS safe ints
                 "packet_id": p.packet_id,
                 "import_time_us": p.import_time_us,
                 "channel": p.channel,

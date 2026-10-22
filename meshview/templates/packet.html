@@ -177,7 +177,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     /* ---------------------------------------------
        Identify packet ID
     ----------------------------------------------*/
-    const match = window.location.pathname.match(/\/packet\/(\d+)/);
+    const match = window.location.pathname.match(/\/packet\/(-?\d+)/);
     if (!match) {
         loading.textContent = packetTranslations.invalid_url || "Invalid packet URL";
         return;
@@ -250,7 +250,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         <div class="card-header">
             <span>
                 <span data-translate-lang="packet_id_label">${packetTranslations.packet_id_label || "Packet ID:"}</span>
-                <i>${p.id}</i>
+                <i>${p.packet_id ?? (p.portnum === 73 ? "Map Report" : p.storage_id)}</i>
             </span>
             <small>${time}</small>
         </div>
