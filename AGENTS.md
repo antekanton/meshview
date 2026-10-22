@@ -189,6 +189,7 @@ meshview/
 
 ## Rules for robots
 - Always run ruff check and ruff format after making changes (only on python changes)
+- Test builds (`rel-...-rcN` tags) and releases follow `CONTRIBUTING.md`; pushing any `rel-*` tag builds the image and deploys it
 
 
 ---
