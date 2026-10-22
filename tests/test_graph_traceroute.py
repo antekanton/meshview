@@ -67,7 +67,16 @@ async def _render(monkeypatch, packet, traceroutes, packets_seen):
 
 async def _node_labels(monkeypatch, packet, traceroutes, packets_seen):
     graph = await _render_graph(monkeypatch, packet, traceroutes, packets_seen)
-    return {int(n.get_name()): (n.get("label") or "").strip('"') for n in graph.get_nodes()}
+    return {
+        int(n.get_name()): (n.get("label") or "").strip('"')
+        for n in graph.get_nodes()
+        if n.get_name() != "legend"
+    }
+
+
+def _legend_label(graph):
+    (legend,) = [n for n in graph.get_nodes() if n.get_name() == "legend"]
+    return legend.get("label")
 
 
 @pytest.mark.asyncio
@@ -209,3 +218,52 @@ async def test_initiator_heard_as_gateway_has_no_hop_label(monkeypatch):
 
     assert "hop:" not in labels[INITIATOR]
     assert "hop: 1" in labels[GATEWAY]
+
+
+def _two_gateways_sharing_a_hop():
+    # Both gateways heard the request after HOP_TOWARDS, so INITIATOR -> HOP_TOWARDS is shared.
+    packet = SimpleNamespace(from_node_id=INITIATOR, to_node_id=TARGET)
+    traceroutes = [
+        SimpleNamespace(
+            route=_route(route=[HOP_TOWARDS], snr_towards=[12]),
+            done=False,
+            gateway_node_id=GATEWAY,
+            import_time_us=1,
+        ),
+        SimpleNamespace(
+            route=_route(route=[HOP_TOWARDS, HOP_BACK], snr_towards=[16, 20, 24]),
+            done=False,
+            gateway_node_id=TARGET,
+            import_time_us=2,
+        ),
+    ]
+    packets_seen = [_seen(GATEWAY, 7.25)]
+    return packet, traceroutes, packets_seen
+
+
+@pytest.mark.asyncio
+async def test_shared_segment_gets_one_edge_per_path(monkeypatch):
+    graph = await _render_graph(monkeypatch, *_two_gateways_sharing_a_hop())
+
+    shared = [
+        e
+        for e in graph.get_edges()
+        if (int(e.get_source()), int(e.get_destination())) == (INITIATOR, HOP_TOWARDS)
+    ]
+
+    assert len(shared) == 2
+    assert {e.get("color") for e in shared} == set(web.TRACEROUTE_PATH_COLORS[:2])
+    assert {e.get("label").strip('"') for e in shared} == {"3.00dB", "4.00dB"}
+
+
+@pytest.mark.asyncio
+async def test_legend_names_border_styles_only(monkeypatch):
+    graph = await _render_graph(monkeypatch, *_two_gateways_sharing_a_hop())
+    label = _legend_label(graph)
+
+    assert [name for name in ("target", "gateway", "relay") if f">{name}</TD>" in label] == [
+        "target",
+        "gateway",
+        "relay",
+    ]
+    assert "!0000000" not in label

@@ -383,6 +383,45 @@ def _gateway_hops(packet_seen):
     return hop_start - hop_limit
 
 
+# Distinct, readable on white; reused in order when there are more paths than colours.
+TRACEROUTE_PATH_COLORS = (
+    "#1f77b4",
+    "#d62728",
+    "#2ca02c",
+    "#ff7f0e",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#17becf",
+    "#7f7f7f",
+    "#bcbd22",
+    "#393b79",
+    "#637939",
+)
+
+
+def _short_node_name(nodes, node_id):
+    node = nodes.get(node_id)
+    hex_id = node_id_to_hex(node_id)
+    if node and node.short_name:
+        return f"{node.short_name} ({hex_id})"
+    return hex_id
+
+
+def _traceroute_legend():
+    """Legend node explaining the node border styles of the traceroute graph."""
+    rows = "".join(
+        f'<TR><TD BORDER="1" WIDTH="22" HEIGHT="12" {attrs}></TD><TD ALIGN="LEFT">{name}</TD></TR>'
+        for attrs, name in (
+            ('BGCOLOR="#bbbbbb"', "target"),
+            ("", "gateway"),
+            ('STYLE="dashed"', "relay"),
+        )
+    )
+    table = f'<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="3">{rows}</TABLE>'
+    return pydot.Node("legend", label=f"<{table}>", shape="plaintext", fontsize="11")
+
+
 # Keep !!
 @routes.get("/graph/traceroute/{packet_id}")
 async def graph_traceroute(request):
@@ -421,12 +460,13 @@ async def graph_traceroute(request):
             nodes[node_id] = tg.create_task(store.get_node(node_id))
 
     graph = pydot.Dot('traceroute', graph_type="digraph")
+    # Added first so graphviz places it in the top-left corner.
+    graph.add_node(_traceroute_legend())
 
-    paths = set()
-    node_color = {}
+    # SNR labels for each edge of each path, in path order; None when not fully known.
+    path_snr = {}
     mqtt_nodes = set()
     dest = packet.to_node_id if is_route_back else None
-    edge_labels = {}
     for tr in traceroutes:
         route = decode_payload.decode_payload(PortNum.TRACEROUTE_APP, tr.route)
         if route is None:
@@ -452,19 +492,27 @@ async def graph_traceroute(request):
                 )
 
         mqtt_nodes.add(tr.gateway_node_id)
-        node_color[path[-1]] = '#' + hex(hash(tuple(path)))[3:9]
-        paths.add(tuple(path))
-        # Сохраняем связи с их метками (используем индекс в пути)
-        if len(current_path_snr) == len(path) - 1:
-            for i in range(len(path) - 1):
-                edge_labels[(path[i], path[i + 1])] = current_path_snr[i]
+        has_snr = len(current_path_snr) == len(path) - 1
+        if has_snr or tuple(path) not in path_snr:
+            path_snr[tuple(path)] = current_path_snr if has_snr else None
+
+    nodes = {node_id: await task for node_id, task in nodes.items()}
+
+    # Each path ends at the gateway that reported it; order and colour paths by length
+    # then gateway name so the legend reads the same on every render.
+    paths = sorted(path_snr, key=lambda p: (len(p), _short_node_name(nodes, p[-1]), p))
+    path_color = {
+        path: TRACEROUTE_PATH_COLORS[i % len(TRACEROUTE_PATH_COLORS)]
+        for i, path in enumerate(paths)
+    }
+    node_color = {path[-1]: color for path, color in path_color.items()}
 
     used_nodes = set()
     for path in paths:
         used_nodes.update(path)
 
     for node_id in used_nodes:
-        node = await nodes[node_id]
+        node = nodes[node_id]
         if not node:
             node_name = node_id_to_hex(node_id)
         else:
@@ -493,17 +541,12 @@ async def graph_traceroute(request):
                 href=f"/node/{node_id}",
             )
         )
-    unique_edges = {}
+    # One edge per path, so a segment shared by several paths shows each of them.
     for path in paths:
-        color = '#' + hex(hash(tuple(path)))[3:9]
-        for src, dest in zip(path, path[1:], strict=False):
-            if (src, dest) not in unique_edges:
-                unique_edges[(src, dest)] = color
-
-    for (src, dest), color in unique_edges.items():
-        label = edge_labels.get((src, dest), "")
-        edge = pydot.Edge(src, dest, color=color, label=label)
-        graph.add_edge(edge)
+        snr = path_snr[path]
+        for i, (src, dst) in enumerate(zip(path, path[1:], strict=False)):
+            label = snr[i] if snr else ""
+            graph.add_edge(pydot.Edge(src, dst, color=path_color[path], label=label))
 
     return web.Response(
         body=graph.create_svg(),

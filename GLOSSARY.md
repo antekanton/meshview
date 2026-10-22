@@ -27,6 +27,10 @@ _Avoid_: route towards, outbound route
 The hops a traceroute response took from the target back towards the initiator; it is often still incomplete when a gateway reports it.
 _Avoid_: reverse route, route back, back path
 
+**Relay**:
+A node a traceroute passed through, other than the initiator, the target and the gateway that reported the observation. The same node can be a relay in one observation and the gateway in another.
+_Avoid_: intermediate node, hop node
+
 **Unknown hop**:
 A hop the firmware could not identify, recorded as a placeholder node number in the path.
 
