@@ -24,7 +24,7 @@ function reachHtml(pkt) {
     const reach = pkt.reach ?? 0;
     const activeGateways = pkt.active_gateways;
     return `<span class="reach"
-                  data-packet-id="${pkt.id}"
+                  data-packet-id="${pkt.storage_id ?? pkt.id}"
                   data-import-time-us="${pkt.import_time_us || 0}"
                   title="${reachTitle(reach, activeGateways)}">${reach}/${activeGateways ?? "?"}</span>`;
 }

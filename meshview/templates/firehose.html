@@ -385,7 +385,7 @@ async function fetchUpdates() {
                        ${pkt.packet_id}
                    </a>`
                 : pkt.portnum === 73
-                ? `<span class="text-secondary" title="MQTT map report">Not at Packet</span>`
+                ? `<a href="/packet/${pkt.storage_id || pkt.id}" class="text-secondary" title="MQTT map report">Map Report</a>`
                 : `<span class="text-secondary" title="No Meshtastic packet ID">—</span>`;
 
             const html = `

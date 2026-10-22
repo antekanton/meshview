@@ -1086,7 +1086,7 @@ async function loadPackets(filters = {}) {
                    ${pkt.packet_id}
                </a>`
             : pkt.portnum === 73
-            ? `<span class="text-secondary" title="MQTT map report">Not a Packet</span>`
+            ? `<a href="/packet/${pkt.storage_id || pkt.id}" class="text-secondary" title="MQTT map report">Map Report</a>`
             : `<span class="text-secondary" title="No Meshtastic packet ID">—</span>`;
 
         list.insertAdjacentHTML("afterbegin", `
@@ -1722,7 +1722,7 @@ async function loadNodeStats(nodeId) {
             : "";
 
         const portName = PORT_LABEL_MAP[pkt.portnum] || `Port ${pkt.portnum}`;
-        const displayPacketId = pkt.packet_id || (pkt.portnum === 73 ? "Not a Packet" : "");
+        const displayPacketId = pkt.packet_id || (pkt.portnum === 73 ? "Map Report" : "");
 
         // Escape quotes + line breaks for CSV safety
         const payload = (pkt.payload || "")
