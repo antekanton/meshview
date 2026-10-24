@@ -2,6 +2,7 @@
 
 import asyncio
 import datetime
+import itertools
 import logging
 import os
 import pathlib
@@ -398,6 +399,8 @@ TRACEROUTE_PATH_COLORS = (
     "#393b79",
     "#637939",
 )
+# Edges on a segment that several paths share.
+TRACEROUTE_SHARED_EDGE_COLOR = "#888888"
 
 
 def _short_node_name(nodes, node_id):
@@ -463,8 +466,9 @@ async def graph_traceroute(request):
     # Added first so graphviz places it in the top-left corner.
     graph.add_node(_traceroute_legend())
 
-    # SNR labels for each edge of each path, in path order; None when not fully known.
-    path_snr = {}
+    found_paths = set()
+    # Distinct SNR labels seen on each directed segment, in the order first seen.
+    segment_snr = {}
     mqtt_nodes = set()
     dest = packet.to_node_id if is_route_back else None
     for tr in traceroutes:
@@ -473,7 +477,7 @@ async def graph_traceroute(request):
             continue
         is_received_by_destination = packet.to_node_id == tr.gateway_node_id
         path = [packet.from_node_id]
-        current_path_snr = []
+        gateway_snr = None
         direction_route = getattr(route, 'route_back' if is_route_back else 'route', [])
         direction_route_snr = getattr(route, 'snr_back' if is_route_back else 'snr_towards', [])
         path.extend(direction_route)
@@ -481,26 +485,32 @@ async def graph_traceroute(request):
             dest = packet.to_node_id
             if path[-1] != tr.gateway_node_id:
                 path.append(tr.gateway_node_id)
+        # The route's SNR list covers every edge up to here only when the lengths match.
+        route_snr = []
         if len(direction_route_snr) == len(path) - 1:
-            current_path_snr.extend([f"{s / 4.0:.2f}dB" for s in direction_route_snr])
+            route_snr = [f"{s / 4.0:.2f}dB" for s in direction_route_snr]
         if path[-1] != tr.gateway_node_id:
             # It seems some nodes add them self to the list before uplinking
             path.append(tr.gateway_node_id)
             if tr.gateway_node_id in packets_seen_by_gateway_id:
-                current_path_snr.append(
-                    f"{packets_seen_by_gateway_id[tr.gateway_node_id].rx_snr:.2f}dB"
-                )
+                gateway_snr = f"{packets_seen_by_gateway_id[tr.gateway_node_id].rx_snr:.2f}dB"
 
         mqtt_nodes.add(tr.gateway_node_id)
-        has_snr = len(current_path_snr) == len(path) - 1
-        if has_snr or tuple(path) not in path_snr:
-            path_snr[tuple(path)] = current_path_snr if has_snr else None
+        # Per-edge SNR of this reception; None where unknown.
+        edge_snr = route_snr + [None] * (len(path) - 1 - len(route_snr))
+        if gateway_snr is not None:
+            edge_snr[-1] = gateway_snr
+        found_paths.add(tuple(path))
+        for segment, value in zip(itertools.pairwise(path), edge_snr, strict=True):
+            labels = segment_snr.setdefault(segment, [])
+            if value is not None and value not in labels:
+                labels.append(value)
 
     nodes = {node_id: await task for node_id, task in nodes.items()}
 
     # Each path ends at the gateway that reported it; order and colour paths by length
-    # then gateway name so the legend reads the same on every render.
-    paths = sorted(path_snr, key=lambda p: (len(p), _short_node_name(nodes, p[-1]), p))
+    # then gateway name so colours stay the same on every render.
+    paths = sorted(found_paths, key=lambda p: (len(p), _short_node_name(nodes, p[-1]), p))
     path_color = {
         path: TRACEROUTE_PATH_COLORS[i % len(TRACEROUTE_PATH_COLORS)]
         for i, path in enumerate(paths)
@@ -541,12 +551,16 @@ async def graph_traceroute(request):
                 href=f"/node/{node_id}",
             )
         )
-    # One edge per path, so a segment shared by several paths shows each of them.
+    # One edge per directed segment: in its path's colour when only one path uses it,
+    # grey when several do.
+    segment_paths = {}
     for path in paths:
-        snr = path_snr[path]
-        for i, (src, dst) in enumerate(zip(path, path[1:], strict=False)):
-            label = snr[i] if snr else ""
-            graph.add_edge(pydot.Edge(src, dst, color=path_color[path], label=label))
+        for segment in itertools.pairwise(path):
+            segment_paths.setdefault(segment, []).append(path)
+    for (src, dst), seg_paths in segment_paths.items():
+        color = path_color[seg_paths[0]] if len(seg_paths) == 1 else TRACEROUTE_SHARED_EDGE_COLOR
+        label = " / ".join(segment_snr[(src, dst)])
+        graph.add_edge(pydot.Edge(src, dst, color=color, label=label))
 
     return web.Response(
         body=graph.create_svg(),

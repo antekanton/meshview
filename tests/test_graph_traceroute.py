@@ -241,19 +241,92 @@ def _two_gateways_sharing_a_hop():
     return packet, traceroutes, packets_seen
 
 
+def _edges_by_segment(graph):
+    edges = {}
+    for e in graph.get_edges():
+        segment = (int(e.get_source()), int(e.get_destination()))
+        edges.setdefault(segment, []).append(e)
+    return edges
+
+
 @pytest.mark.asyncio
-async def test_shared_segment_gets_one_edge_per_path(monkeypatch):
+async def test_shared_segment_gets_one_grey_edge(monkeypatch):
     graph = await _render_graph(monkeypatch, *_two_gateways_sharing_a_hop())
+    edges = _edges_by_segment(graph)
 
-    shared = [
-        e
-        for e in graph.get_edges()
-        if (int(e.get_source()), int(e.get_destination())) == (INITIATOR, HOP_TOWARDS)
+    assert all(len(group) == 1 for group in edges.values())
+    (shared,) = edges[(INITIATOR, HOP_TOWARDS)]
+    assert shared.get("color") == web.TRACEROUTE_SHARED_EDGE_COLOR
+    # The two receptions disagree on this hop's SNR, so both values are shown.
+    assert shared.get("label").strip('"') == "3.00dB / 4.00dB"
+
+
+@pytest.mark.asyncio
+async def test_segment_used_by_one_path_keeps_its_colour(monkeypatch):
+    graph = await _render_graph(monkeypatch, *_two_gateways_sharing_a_hop())
+    edges = _edges_by_segment(graph)
+
+    colours = {
+        edges[(HOP_TOWARDS, GATEWAY)][0].get("color"),
+        edges[(HOP_TOWARDS, HOP_BACK)][0].get("color"),
+        edges[(HOP_BACK, TARGET)][0].get("color"),
+    }
+    assert web.TRACEROUTE_SHARED_EDGE_COLOR not in colours
+    assert edges[(HOP_TOWARDS, HOP_BACK)][0].get("color") == edges[(HOP_BACK, TARGET)][0].get(
+        "color"
+    )
+    assert edges[(HOP_TOWARDS, GATEWAY)][0].get("color") != edges[(HOP_BACK, TARGET)][0].get(
+        "color"
+    )
+
+
+@pytest.mark.asyncio
+async def test_shared_segment_with_matching_snr_shows_it_once(monkeypatch):
+    packet = SimpleNamespace(from_node_id=INITIATOR, to_node_id=TARGET)
+    traceroutes = [
+        SimpleNamespace(
+            route=_route(route=[HOP_TOWARDS], snr_towards=[12]),
+            done=False,
+            gateway_node_id=GATEWAY,
+            import_time_us=1,
+        ),
+        SimpleNamespace(
+            route=_route(route=[HOP_TOWARDS], snr_towards=[12]),
+            done=False,
+            gateway_node_id=HOP_BACK,
+            import_time_us=2,
+        ),
     ]
+    packets_seen = [_seen(GATEWAY, 7.25), _seen(HOP_BACK, 1.5)]
 
-    assert len(shared) == 2
-    assert {e.get("color") for e in shared} == set(web.TRACEROUTE_PATH_COLORS[:2])
-    assert {e.get("label").strip('"') for e in shared} == {"3.00dB", "4.00dB"}
+    edges = await _render(monkeypatch, packet, traceroutes, packets_seen)
+
+    assert edges == {
+        (INITIATOR, HOP_TOWARDS): "3.00dB",
+        (HOP_TOWARDS, GATEWAY): "7.25dB",
+        (HOP_TOWARDS, HOP_BACK): "1.50dB",
+    }
+
+
+@pytest.mark.asyncio
+async def test_gateway_snr_is_shown_when_route_snr_is_incomplete(monkeypatch):
+    packet = SimpleNamespace(from_node_id=INITIATOR, to_node_id=TARGET)
+    traceroutes = [
+        SimpleNamespace(
+            route=_route(route=[HOP_TOWARDS], snr_towards=[]),
+            done=False,
+            gateway_node_id=GATEWAY,
+            import_time_us=1,
+        )
+    ]
+    packets_seen = [_seen(GATEWAY, 7.25)]
+
+    edges = await _render(monkeypatch, packet, traceroutes, packets_seen)
+
+    assert edges == {
+        (INITIATOR, HOP_TOWARDS): "",
+        (HOP_TOWARDS, GATEWAY): "7.25dB",
+    }
 
 
 @pytest.mark.asyncio
