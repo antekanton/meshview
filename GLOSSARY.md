@@ -40,9 +40,28 @@ _Avoid_: uplink node, MQTT node
 
 ## Packet reception
 
+**Channel**:
+The channel a packet was sent on, as configured on the sender's radio: a name together with an encryption key. A packet has exactly one channel, whatever the gateways that heard it call it.
+_Avoid_: channel name (a name alone does not identify a channel), channel index
+
+**Channel hash**:
+A one-byte fingerprint of a channel's name and key that the sender puts on every packet. Different channels can share a hash, so it narrows a packet's channel down rather than naming it.
+
+**Reported channel name**:
+The channel name a gateway attaches to one reception, taken from that gateway's own settings. It is evidence of the packet's channel, not the channel itself, and can be wrong.
+_Avoid_: packet channel, gateway channel
+
+**Unknown channel**:
+A channel whose name could not be established from the receptions; it is told apart from other unknown channels only by its channel hash. Reach of its packets is read against the gateways of the same unknown channel.
+_Avoid_: default channel, no channel
+
 **Reception**:
 One instance of a gateway hearing a packet and uplinking it; the same gateway may produce several receptions of one packet (e.g. directly and via a relay).
 _Avoid_: seen, observation, sighting
+
+**Sniffer**:
+A gateway that deliberately uplinks every packet it hears on the air, whatever its channel and whether or not the sender allowed MQTT, so that all traffic is visible; it gives them all one fixed reported channel name. Its receptions count towards reach; its reported channel name says nothing about the packet's channel.
+_Avoid_: monitor, listener
 
 **Reach**:
 The number of distinct gateways that heard a packet, regardless of how many receptions each produced. The sender counts when it uplinked its own packet.
