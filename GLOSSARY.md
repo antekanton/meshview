@@ -28,14 +28,14 @@ The hops a traceroute response took from the target back towards the initiator; 
 _Avoid_: reverse route, route back, back path
 
 **Relay**:
-A node a traceroute passed through, other than the initiator, the target and the gateway that reported the observation. The same node can be a relay in one observation and the gateway in another.
+A node a traceroute passed through, other than the initiator, the target and the gateway that reported the reception. The same node can be a relay in one reception and the gateway in another.
 _Avoid_: intermediate node, hop node
 
 **Unknown hop**:
 A hop the firmware could not identify, recorded as a placeholder node number in the path.
 
 **Gateway**:
-A node that uplinks packets it hears to MQTT; each traceroute observation comes from one gateway.
+A node that uplinks packets it hears to MQTT; each traceroute reception comes from one gateway.
 _Avoid_: uplink node, MQTT node
 
 ## Packet reception
