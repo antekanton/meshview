@@ -119,9 +119,16 @@ Query Parameters
 Response Example
 ```json
 {
-  "channels": ["LongFast", "MediumFast", "ShortFast"]
+  "channels": ["LongFast", "MediumFast", "PKI", "Ping", "? #49"]
 }
 ```
+
+Channel labels (used in every `channel` field and filter on packets):
+- A packet's channel is identified by the channel hash in the packet, not by the name a gateway reports (see `docs/adr/0001-channel-identified-by-hash.md`).
+- `<name>`: a verified channel name; `<name> #<hash>` when the same name belongs to channels with different keys.
+- `? #<hash>`: a channel whose name is not known yet.
+- `PKI`: direct messages encrypted with the recipient's key (not a channel).
+- A packet's label can change as more receptions arrive (e.g. from `? #49` to a name).
 
 ---
 

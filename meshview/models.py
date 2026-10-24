@@ -52,7 +52,9 @@ class Packet(Base):
     )
     payload: Mapped[bytes] = mapped_column(nullable=True)
     import_time_us: Mapped[int] = mapped_column(BigInteger, nullable=True)
+    # Channel label (see meshview.channels) and the channel hash it was resolved from.
     channel: Mapped[str] = mapped_column(nullable=True)
+    channel_hash: Mapped[int] = mapped_column(nullable=True)
 
     __table_args__ = (
         Index("idx_packet_from_node_id", "from_node_id"),
@@ -86,6 +88,15 @@ class PacketSeen(Base):
         Index("idx_packet_seen_packet_id", "packet_id"),
         Index("idx_packet_seen_import_time_us", "import_time_us"),
     )
+
+
+class ChannelName(Base):
+    """A verified channel name for a channel hash (see GLOSSARY.md)."""
+
+    __tablename__ = "channel_name"
+    channel_hash: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(primary_key=True)
+    first_seen_us: Mapped[int] = mapped_column(BigInteger, nullable=True)
 
 
 class Traceroute(Base):

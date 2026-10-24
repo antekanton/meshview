@@ -3,16 +3,17 @@ import re
 import time
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 
 from meshtastic.protobuf.config_pb2 import Config
-from meshtastic.protobuf.mesh_pb2 import HardwareModel
+from meshtastic.protobuf.mesh_pb2 import HardwareModel, MeshPacket
 from meshtastic.protobuf.portnums_pb2 import PortNum
 from meshview import decode_payload, mqtt_database
-from meshview.models import DailySnapshot, Node, Packet, PacketSeen, Traceroute
+from meshview.channels import ChannelNames, unknown_label
+from meshview.models import ChannelName, DailySnapshot, Node, Packet, PacketSeen, Traceroute
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,124 @@ MQTT_GATEWAY_CACHE: set[int] = set()
 UNKNOWN_NODE_NAME = "unknown name"
 NODE_NAME_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 MQTT_DIRECT_NODE_ID = 1
+
+
+_channel_names: ChannelNames | None = None
+
+
+def channel_names() -> ChannelNames:
+    """Verified channel names, keyed by the keys meshview decrypts with."""
+    global _channel_names
+    if _channel_names is None:
+        from meshview.mqtt_reader import PRIMARY_KEY, SECONDARY_KEYS
+
+        _channel_names = ChannelNames(PRIMARY_KEY, [PRIMARY_KEY, *SECONDARY_KEYS])
+    return _channel_names
+
+
+def _insert_ignore(session, model, values, index_elements):
+    dialect = session.get_bind().dialect.name
+    if dialect == "sqlite":
+        return (
+            sqlite_insert(model)
+            .values(**values)
+            .on_conflict_do_nothing(index_elements=index_elements)
+        )
+    if dialect == "postgresql":
+        return (
+            pg_insert(model).values(**values).on_conflict_do_nothing(index_elements=index_elements)
+        )
+    raise NotImplementedError(f"Unsupported dialect: {dialect}")
+
+
+async def load_channel_names():
+    names = channel_names()
+    async with mqtt_database.async_session() as session:
+        result = await session.execute(select(ChannelName.channel_hash, ChannelName.name))
+        for hash_, name in result.all():
+            names.learn(hash_, name)
+
+
+async def _learn_channel_name(session, hash_: int, name: str, relabel: bool = True) -> None:
+    """Remember a verified name and relabel packets whose label it changes."""
+    names = channel_names()
+    hash_was_unnamed = not names.names_by_hash.get(hash_)
+    other_hashes = set(names.hashes_by_name.get(name, set()))
+    if not names.learn(hash_, name):
+        return
+    await session.execute(
+        _insert_ignore(
+            session,
+            ChannelName,
+            {
+                "channel_hash": hash_,
+                "name": name,
+                "first_seen_us": int(time.time() * 1_000_000),
+            },
+            ["channel_hash", "name"],
+        )
+    )
+    if not relabel:
+        return
+    # The name now belongs to two hashes: the old channel's packets get "<name> #<hash>".
+    if len(other_hashes) == 1:
+        (old_hash,) = other_hashes
+        await session.execute(
+            update(Packet)
+            .where(Packet.channel == name, Packet.channel_hash == old_hash)
+            .values(channel=names.label(name, old_hash))
+        )
+    # The channel was unknown: its packets get the name.
+    if hash_was_unnamed:
+        await session.execute(
+            update(Packet)
+            .where(Packet.channel == unknown_label(hash_), Packet.channel_hash == hash_)
+            .values(channel=names.label(name, hash_))
+        )
+
+
+async def _resolve_packet_channel(session, packet_id: int, env) -> None:
+    """Recompute a packet's channel from all its receptions so far."""
+    names = channel_names()
+    stored_hash = (
+        await session.execute(select(Packet.channel_hash).where(Packet.id == packet_id))
+    ).scalar_one_or_none()
+    hash_ = stored_hash if stored_hash is not None else env.packet.channel
+
+    reported = set(
+        (
+            await session.execute(
+                select(PacketSeen.channel).where(PacketSeen.packet_id == packet_id).distinct()
+            )
+        )
+        .scalars()
+        .all()
+    )
+    reported.add(env.channel_id)
+    for name in reported:
+        if names.verifies(name, hash_):
+            await _learn_channel_name(session, hash_, name)
+
+    original = None
+    reply_id = env.packet.decoded.reply_id
+    if reply_id:
+        row = (
+            await session.execute(
+                select(Packet.channel_hash, Packet.channel).where(Packet.id == reply_id)
+            )
+        ).first()
+        if row is not None:
+            original = (row[0], row[1])
+
+    label = names.resolve(hash_, reported, pki=env.packet.pki_encrypted, original=original)
+    await session.execute(
+        update(Packet)
+        .where(
+            Packet.id == packet_id,
+            or_(Packet.channel.is_distinct_from(label), Packet.channel_hash.is_(None)),
+        )
+        .values(channel=label, channel_hash=hash_)
+    )
 
 
 def normalize_node_name(name: str) -> str:
@@ -264,6 +383,10 @@ async def process_envelope(topic, env):
             except IntegrityError:
                 pass
 
+        # MAP_REPORT packets come straight from a node over MQTT and carry no channel hash.
+        if packet_id > 0:
+            await _resolve_packet_channel(session, packet_id, env)
+
         # --- NODEINFO_APP handling
         if env.packet.decoded.portnum == PortNum.NODEINFO_APP:
             try:
@@ -362,6 +485,96 @@ async def process_envelope(topic, env):
                 )
 
         await session.commit()
+
+
+async def recompute_packet_channels(batch_size: int = 2000) -> int:
+    """Resolve the channel of stored packets that predate channel hashes (#16).
+
+    Runs once after the migration that added packet.channel_hash: it handles every packet
+    whose channel_hash is still empty. First pass reads each packet's hash and learns the
+    verified names of all its receptions; second pass labels every packet with the full
+    dictionary, so a packet only sniffers heard still gets a name verified elsewhere.
+    Returns the number of packets relabelled.
+    """
+    names = channel_names()
+    info: dict[int, tuple[int, bool, int]] = {}  # id -> (hash, pki, reply_id)
+    reported: dict[int, set[str]] = {}
+
+    last_id = 0
+    while True:
+        async with mqtt_database.async_session() as session:
+            rows = (
+                await session.execute(
+                    select(Packet.id, Packet.payload)
+                    .where(
+                        Packet.channel_hash.is_(None),
+                        Packet.payload.is_not(None),
+                        Packet.id > last_id,
+                    )
+                    .order_by(Packet.id)
+                    .limit(batch_size)
+                )
+            ).all()
+            if not rows:
+                break
+            last_id = rows[-1][0]
+            ids = [packet_id for packet_id, _ in rows]
+            for packet_id, payload in rows:
+                packet = MeshPacket()
+                try:
+                    packet.ParseFromString(payload)
+                except Exception:
+                    continue
+                info[packet_id] = (packet.channel, packet.pki_encrypted, packet.decoded.reply_id)
+            seen = await session.execute(
+                select(PacketSeen.packet_id, PacketSeen.channel)
+                .where(PacketSeen.packet_id.in_(ids))
+                .distinct()
+            )
+            for packet_id, name in seen.all():
+                reported.setdefault(packet_id, set()).add(name)
+            for packet_id in ids:
+                if packet_id not in info:
+                    continue
+                hash_ = info[packet_id][0]
+                for name in reported.get(packet_id, ()):
+                    if names.verifies(name, hash_):
+                        await _learn_channel_name(session, hash_, name, relabel=False)
+            await session.commit()
+
+    if not info:
+        return 0
+    logger.info("Recomputing the channel of %d stored packets", len(info))
+
+    labels = {
+        packet_id: names.resolve(hash_, reported.get(packet_id, ()), pki=pki)
+        for packet_id, (hash_, pki, _) in info.items()
+    }
+    # A reply on an ambiguous hash takes the channel of the message it answers.
+    for packet_id, (hash_, pki, reply_id) in info.items():
+        if reply_id and reply_id in labels and labels[packet_id] == unknown_label(hash_):
+            original = (info[reply_id][0], labels[reply_id])
+            labels[packet_id] = names.resolve(
+                hash_, reported.get(packet_id, ()), pki=pki, original=original
+            )
+
+    ids = list(labels)
+    for i in range(0, len(ids), batch_size):
+        async with mqtt_database.async_session() as session:
+            await session.execute(
+                update(Packet),
+                [
+                    {
+                        "id": packet_id,
+                        "channel": labels[packet_id],
+                        "channel_hash": info[packet_id][0],
+                    }
+                    for packet_id in ids[i : i + batch_size]
+                ],
+            )
+            await session.commit()
+    logger.info("Recomputed the channel of %d stored packets", len(ids))
+    return len(ids)
 
 
 async def load_gateway_cache():
