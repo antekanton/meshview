@@ -381,6 +381,10 @@ async def main():
         # Load MQTT gateway cache after DB init/migrations
         await mqtt_store.load_gateway_cache()
 
+        # Verified channel names, then the channel of packets stored before channel hashes
+        await mqtt_store.load_channel_names()
+        await mqtt_store.recompute_packet_channels()
+
     finally:
         # Clear migration in progress flag
         logger.info("Clearing migration status...")
