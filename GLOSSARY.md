@@ -51,6 +51,13 @@ A one-byte fingerprint of a channel's name and key that the sender puts on every
 The channel name a gateway attaches to one reception, taken from that gateway's own settings. It is evidence of the packet's channel, not the channel itself, and can be wrong.
 _Avoid_: packet channel, gateway channel
 
+**Verified channel name**:
+A reported channel name that, together with one of the known keys, produces the packet's channel hash. Once verified, a name is remembered for that hash and can name later packets that only sniffers heard. Modem preset names count as verified only with the default key.
+
+**PKI**:
+The label for a direct message encrypted with the recipient's public key. It is not a channel: such a packet carries no channel hash, and its PKI receptions form a group of their own.
+_Avoid_: PKI channel
+
 **Unknown channel**:
 A channel whose name could not be established from the receptions; it is told apart from other unknown channels only by its channel hash. Reach of its packets is read against the gateways of the same unknown channel.
 _Avoid_: default channel, no channel
