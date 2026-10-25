@@ -271,7 +271,7 @@ async function fetchStats(period_type,length,portnum=null,channel=null){
     try{
         let url=`/api/stats?period_type=${period_type}&length=${length}`;
         if(portnum!==null) url+=`&portnum=${portnum}`;
-        if(channel) url+=`&channel=${channel}`;
+        if(channel) url+=`&channel=${encodeURIComponent(channel)}`;
         const res=await fetch(url);
         if(!res.ok) return [];
         const json=await res.json();
