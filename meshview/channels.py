@@ -16,6 +16,10 @@ from functools import reduce
 
 PKI_LABEL = "PKI"
 
+# Channel filter value that matches every unknown channel at once. It is a filter group,
+# not a channel: unknown channels stay distinct by hash everywhere else.
+UNKNOWN_GROUP = "?"
+
 # Modem preset names. A channel with an empty name is called by its preset name.
 PRESET_NAMES = (
     "LongFast",
@@ -45,6 +49,21 @@ def unknown_label(hash_: int) -> str:
 
 def is_unknown_label(label: str | None) -> bool:
     return bool(label and _UNKNOWN_LABEL.match(label))
+
+
+def channel_filter_options(counts: dict[str, int]) -> list[dict]:
+    """Channel filter options from packet counts per label.
+
+    Named channels and PKI come first, busiest first; all unknown channels are folded
+    into one UNKNOWN_GROUP option at the end.
+    """
+    unknown = sum(n for label, n in counts.items() if is_unknown_label(label))
+    named = [(label, n) for label, n in counts.items() if label and not is_unknown_label(label)]
+    named.sort(key=lambda item: (-item[1], item[0].lower()))
+    options = [{"channel": label, "count": n} for label, n in named]
+    if unknown:
+        options.append({"channel": UNKNOWN_GROUP, "count": unknown})
+    return options
 
 
 class ChannelNames:

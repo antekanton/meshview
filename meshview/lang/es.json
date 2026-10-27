@@ -50,6 +50,7 @@
   },
 
   "chat": {
+    "unknown_channels": "Desconocidos",
     "reach_title": "Alcance: {reach} de {active} gateways activos del canal (últimas {hours} h)",
     "chat_title": "Conversaciones:",
     "replying_to": "Respondiendo a:",
@@ -121,6 +122,7 @@
   },
 
   "stats": {
+    "unknown_channels": "Desconocidos",
     "mesh_stats_summary": "Estadísticas de la Malla - Resumen (completas en la base de datos)",
     "total_nodes": "Nodos Totales",
     "total_gateways": "Gateways Totales",
@@ -176,6 +178,7 @@
   },
 
   "firehose": {
+    "unknown_channels": "Desconocidos",
     "reach": "Alcance",
     "reach_title": "Alcance: {reach} de {active} gateways activos del canal (últimas {hours} h)",
     "live_feed": "📡 Flujo en vivo",

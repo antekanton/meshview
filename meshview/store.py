@@ -5,9 +5,17 @@ from sqlalchemy import Text, and_, case, cast, func, or_, select
 from sqlalchemy.orm import lazyload
 
 from meshview import database, models
+from meshview.channels import UNKNOWN_GROUP, channel_filter_options
 from meshview.models import Node, Packet, PacketSeen, Traceroute
 
 logger = logging.getLogger(__name__)
+
+
+def channel_condition(channel: str):
+    """WHERE clause for a channel filter: a label (case-insensitive) or UNKNOWN_GROUP."""
+    if channel == UNKNOWN_GROUP:
+        return Packet.channel.like("? #%")
+    return func.lower(Packet.channel) == channel.lower()
 
 
 async def get_node(node_id):
@@ -34,6 +42,7 @@ async def get_packets(
     portnum=None,
     after=None,
     contains=None,  # substring search
+    channel=None,
     limit=50,
 ):
     async with database.async_session() as session:
@@ -60,6 +69,9 @@ async def get_packets(
         # Port filter
         if portnum is not None:
             conditions.append(models.Packet.portnum == portnum)
+
+        if channel:
+            conditions.append(channel_condition(channel))
 
         # Timestamp filter using microseconds
         if after is not None:
@@ -426,7 +438,7 @@ async def get_packet_stats(
 
         # Filters
         if channel:
-            q = q.where(func.lower(Packet.channel) == channel.lower())
+            q = q.where(channel_condition(channel))
         if portnum is not None:
             q = q.where(Packet.portnum == portnum)
         if to_node is not None:
@@ -450,13 +462,17 @@ async def get_packet_stats(
         }
 
 
-async def get_channels_in_period(period_type: str = "hour", length: int = 24):
+async def get_channels_in_period(
+    period_type: str = "hour", length: int = 24, portnum: int | None = None
+):
     """
-    Returns a sorted list of distinct channels used in packets over a given period.
+    Channel filter options for packets over a given period, with packet counts
+    (see channel_filter_options).
     period_type: "hour" or "day"
     length: number of hours or days to look back
+    portnum: only count packets of this port
     """
-    now_us = int(datetime.utcnow().timestamp() * 1_000_000)
+    now_us = int(datetime.now(UTC).timestamp() * 1_000_000)
 
     if period_type == "hour":
         delta_us = length * 3600 * 1_000_000
@@ -469,17 +485,28 @@ async def get_channels_in_period(period_type: str = "hour", length: int = 24):
 
     async with database.async_session() as session:
         stmt = (
-            select(Packet.channel)
-            .where(Packet.import_time_us >= start_us)
-            .distinct()
-            .order_by(Packet.channel)
+            select(Packet.channel, func.count())
+            .where(Packet.import_time_us >= start_us, Packet.channel.is_not(None))
+            .group_by(Packet.channel)
         )
+        if portnum is not None:
+            stmt = stmt.where(Packet.portnum == portnum)
 
         result = await session.execute(stmt)
+        return channel_filter_options(dict(result.all()))
 
-        channels = [ch for ch in result.scalars().all() if ch is not None]
 
-        return channels
+async def get_node_channels():
+    """Channel names nodes report (Node.channel) with node counts, busiest first."""
+    async with database.async_session() as session:
+        stmt = (
+            select(Node.channel, func.count())
+            .where(Node.channel.is_not(None), Node.channel != "")
+            .group_by(Node.channel)
+        )
+        result = await session.execute(stmt)
+        rows = sorted(result.all(), key=lambda row: (-row[1], row[0].lower()))
+        return [{"channel": channel, "count": n} for channel, n in rows]
 
 
 async def get_total_packet_count(
@@ -527,7 +554,7 @@ async def get_total_packet_count(
         q = select(func.count(Packet.id)).where(Packet.import_time_us >= start_time_us)
 
         if channel:
-            q = q.where(func.lower(Packet.channel) == channel.lower())
+            q = q.where(channel_condition(channel))
         if from_node:
             q = q.where(Packet.from_node_id == from_node)
         if to_node:
@@ -596,7 +623,7 @@ async def get_total_packet_seen_count(
         )
 
         if channel:
-            q = q.where(func.lower(Packet.channel) == channel.lower())
+            q = q.where(channel_condition(channel))
         if from_node:
             q = q.where(Packet.from_node_id == from_node)
         if to_node:

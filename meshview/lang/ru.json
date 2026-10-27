@@ -49,6 +49,7 @@
         }
     },
     "chat": {
+        "unknown_channels": "Неизвестные",
         "reach_title": "Охват: {reach} из {active} активных шлюзов канала (за {hours} ч)",
         "chat_title": "Чаты:",
         "replying_to": "В ответ на:",
@@ -113,6 +114,7 @@
         "legend_neighbor": "Сосед"
     },
     "stats": {
+        "unknown_channels": "Неизвестные",
         "mesh_stats_summary": "Сводка статистики сети (все доступные в базе данных)",
         "total_nodes": "Всего нод",
         "total_gateways": "Всего шлюзов",
@@ -160,6 +162,7 @@
         "node_not_found": "Узел не найден в текущем канале!"
     },
     "firehose": {
+        "unknown_channels": "Неизвестные",
         "reach": "Охват",
         "reach_title": "Охват: {reach} из {active} активных шлюзов канала (за {hours} ч)",
         "live_feed": "📡 Прямой эфир",

@@ -132,6 +132,7 @@
 
 <script src="/static/portmaps.js"></script>
 <script src="/static/reach.js"></script>
+<script src="/static/channel-filter.js"></script>
 <script>
 /* ======================================================
    FIREHOSE TRANSLATION SYSTEM (isolated from base)
@@ -269,23 +270,11 @@ async function configureFirehose() {
 }
 
 async function loadChannels() {
-    try {
-        const res = await fetch("/api/channels");
-        if (!res.ok) return;
-
-        const data = await res.json();
-        const select = document.getElementById("channel-filter");
-        const channels = data.channels || [];
-
-        for (const channel of channels) {
-            const option = document.createElement("option");
-            option.value = channel;
-            option.textContent = channel;
-            select.appendChild(option);
-        }
-    } catch (err) {
-        console.error("Failed loading channels:", err);
-    }
+    await loadChannelOptions(
+        document.getElementById("channel-filter"),
+        {},
+        firehoseTranslations.unknown_channels || "Unknown",
+    );
 }
 
 function resetFirehose() {
@@ -293,16 +282,14 @@ function resetFirehose() {
     document.getElementById("packet_list").innerHTML = "";
 }
 
-function matchesSelectedChannel(packet) {
-    if (!selectedChannel) return true;
-    return (packet.channel || "").toLowerCase() === selectedChannel.toLowerCase();
-}
-
 async function fetchUpdates() {
     if (updatesPaused) return;
 
+    const channel = selectedChannel;
     const url = new URL("/api/packets", window.location.origin);
     url.searchParams.set("limit", 100);
+    if (channel)
+        url.searchParams.set("channel", channel);
 
     if (lastImportTimeUs)
         url.searchParams.set("since", lastImportTimeUs);
@@ -312,14 +299,15 @@ async function fetchUpdates() {
         if (!res.ok) return;
 
         const data = await res.json();
+        // The filter changed while this request was in flight
+        if (channel !== selectedChannel) return;
+
         const packets = data.packets || [];
         if (!packets.length) return;
 
         const list = document.getElementById("packet_list");
 
         for (const pkt of packets.reverse()) {
-            if (!matchesSelectedChannel(pkt)) continue;
-
             logPacketTimes(pkt);
 
             /* FROM — includes translation */

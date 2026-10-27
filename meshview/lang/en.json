@@ -54,7 +54,8 @@
         "replying_to": "Replying to:",
         "view_packet_details": "View packet details",
         "channel": "Channel",
-        "all_channels": "All Channels"
+        "all_channels": "All Channels",
+        "unknown_channels": "Unknown"
    },
     "nodelist": {
         "search_placeholder": "Search by name or ID...",
@@ -147,6 +148,7 @@
       "expand_chart": "Expand Chart",
       "export_csv": "Export CSV",
       "all_channels": "All Channels",
+      "unknown_channels": "Unknown",
       "node_id": "Node ID"
     },
       "top": {
@@ -188,6 +190,7 @@
         "to": "To",
         "channel": "Channel",
         "all_channels": "All Channels",
+        "unknown_channels": "Unknown",
         "port": "Port",
         "links": "Links",
         "unknown_app": "UNKNOWN APP",

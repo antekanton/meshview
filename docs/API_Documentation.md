@@ -51,6 +51,7 @@ Query Parameters
 - `since` (optional, int): Only packets imported after this microsecond timestamp.
 - `portnum` (optional, int): Filter by port number.
 - `contains` (optional, string): Payload substring filter.
+- `channel` (optional, string): Filter by channel label (case-insensitive); `?` matches every unknown channel.
 - `from_node_id` (optional, int): Filter by sender node ID.
 - `to_node_id` (optional, int): Filter by recipient node ID.
 - `node_id` (optional, int): Legacy filter matching either from or to node ID.
@@ -110,18 +111,31 @@ Notes
 ## 3. Channels API
 
 ### GET `/api/channels`
-Returns channels seen in a time period.
+Returns the options for a channel filter: channels that have packets in a time period,
+busiest first, with packet counts.
 
 Query Parameters
 - `period_type` (optional, string): `hour` or `day`. Default: `hour`.
 - `length` (optional, int): Number of periods to look back. Default: `24`.
+- `portnum` (optional, int): Only count packets of this port (e.g. `1` for text messages).
+- `source` (optional, string): `nodes` lists the channel names nodes report (`channel` of `/api/nodes`) with node counts instead; this is what `/api/stats/top` filters on. `period_type`, `length` and `portnum` are ignored.
 
 Response Example
 ```json
 {
-  "channels": ["LongFast", "MediumFast", "PKI", "Ping", "? #49"]
+  "channels": ["LongFast", "MediumFast", "PKI", "Ping", "?"],
+  "options": [
+    { "channel": "LongFast", "count": 1243 },
+    { "channel": "MediumFast", "count": 310 },
+    { "channel": "PKI", "count": 12 },
+    { "channel": "Ping", "count": 4 },
+    { "channel": "?", "count": 57 }
+  ]
 }
 ```
+
+- Named channels and `PKI` come first, by count (highest first).
+- All unknown channels (`? #<hash>`) are folded into one option `?`, always last. Passing `channel=?` to `/api/packets`, `/api/stats` or `/api/stats/count` matches every unknown channel at once.
 
 Channel labels (used in every `channel` field and filter on packets):
 - A packet's channel is identified by the channel hash in the packet, not by the name a gateway reports (see `docs/adr/0001-channel-identified-by-hash.md`).
@@ -140,7 +154,7 @@ Returns packet statistics aggregated by time periods, with optional filtering.
 Query Parameters
 - `period_type` (optional, string): `hour` or `day`. Default: `hour`.
 - `length` (optional, int): Number of periods to include. Default: `24`.
-- `channel` (optional, string): Filter by channel (case-insensitive).
+- `channel` (optional, string): Filter by channel (case-insensitive); `?` matches every unknown channel.
 - `portnum` (optional, int): Filter by port number.
 - `to_node` (optional, int): Filter by destination node ID.
 - `from_node` (optional, int): Filter by source node ID.
@@ -182,7 +196,7 @@ Query Parameters
 - `packet_id` (optional, int): Filter packet_seen by packet ID.
 - `period_type` (optional, string): `hour` or `day`.
 - `length` (optional, int): Number of periods to include.
-- `channel` (optional, string): Filter by channel.
+- `channel` (optional, string): Filter by channel; `?` matches every unknown channel.
 - `from_node` (optional, int): Filter by source node ID.
 - `to_node` (optional, int): Filter by destination node ID.
 
@@ -202,7 +216,7 @@ Returns nodes sorted by packets seen, with pagination.
 Query Parameters
 - `period_type` (optional, string): `hour` or `day`. Default: `day`.
 - `length` (optional, int): Number of periods to include. Default: `1`.
-- `channel` (optional, string): Filter by channel.
+- `channel` (optional, string): Filter by the channel name nodes report (see `/api/channels?source=nodes`).
 - `limit` (optional, int): Max nodes to return. Default: `20`, max `100`.
 - `offset` (optional, int): Pagination offset. Default: `0`.
 
