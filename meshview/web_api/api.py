@@ -206,14 +206,23 @@ def init_api_module(packet_class, seq_regex, lang_dir):
 
 @routes.get("/api/channels")
 async def api_channels(request: web.Request):
+    """Channel filter options: channels with packets in the period, busiest first.
+
+    source=nodes lists the channel names nodes report instead (used by /api/stats/top).
+    """
     period_type = request.query.get("period_type", "hour")
     length = int(request.query.get("length", 24))
+    portnum_str = request.query.get("portnum")
 
     try:
-        channels = await store.get_channels_in_period(period_type, length)
-        return web.json_response({"channels": channels})
+        if request.query.get("source") == "nodes":
+            options = await store.get_node_channels()
+        else:
+            portnum = int(portnum_str) if portnum_str else None
+            options = await store.get_channels_in_period(period_type, length, portnum)
+        return web.json_response({"channels": [o["channel"] for o in options], "options": options})
     except Exception as e:
-        return web.json_response({"channels": [], "error": str(e)})
+        return web.json_response({"channels": [], "options": [], "error": str(e)})
 
 
 @routes.get("/api/nodes")
@@ -275,6 +284,7 @@ async def api_packets(request):
         since_str = request.query.get("since")
         portnum_str = request.query.get("portnum")
         contains = request.query.get("contains")
+        channel = request.query.get("channel")
 
         # NEW — explicit filters
         from_node_id_str = request.query.get("from_node_id")
@@ -372,6 +382,7 @@ async def api_packets(request):
             portnum=portnum,
             after=since,
             contains=contains_for_query,
+            channel=channel or None,
             limit=limit,
         )
 

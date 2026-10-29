@@ -90,6 +90,7 @@
 </div>
 
 <script src="/static/reach.js"></script>
+<script src="/static/channel-filter.js"></script>
 <script>
 document.addEventListener("DOMContentLoaded", async () => {
     const chatContainer = document.querySelector("#chat-log");
@@ -131,23 +132,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function loadChannels() {
-        try {
-            const res = await fetch("/api/channels");
-            if (!res.ok) return;
-
-            const data = await res.json();
-            const select = document.getElementById("channel-filter");
-            const channels = data.channels || [];
-
-            for (const channel of channels) {
-                const option = document.createElement("option");
-                option.value = channel;
-                option.textContent = channel;
-                select.appendChild(option);
-            }
-        } catch (err) {
-            console.error("Failed loading channels:", err);
-        }
+        // Only channels that have text messages to show
+        await loadChannelOptions(
+            document.getElementById("channel-filter"),
+            { portnum: 1 },
+            chatLang.unknown_channels || "Unknown",
+        );
     }
 
     /* ==========================================================
@@ -246,11 +236,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (highlight) setTimeout(() => div.classList.remove("flash"), 2500);
     }
 
-    function matchesSelectedChannel(packet) {
-        if (!selectedChannel) return true;
-        return (packet.channel || "").toLowerCase() === selectedChannel.toLowerCase();
-    }
-
     function resetChat() {
         lastTime = null;
         renderedPacketIds.clear();
@@ -266,7 +251,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             return bTime - aTime;
         });
         for (let i=sortedDesc.length-1; i>=0; i--) {
-            if (!matchesSelectedChannel(sortedDesc[i])) continue;
             renderPacket(sortedDesc[i], highlight);
         }
     }
@@ -274,12 +258,26 @@ document.addEventListener("DOMContentLoaded", async () => {
     /* ==========================================================
        FETCHING PACKETS
        ========================================================== */
+    function packetsUrl() {
+        const url = new URL("/api/packets?portnum=1", window.location.origin);
+        url.searchParams.set("limit", "100");
+        if (selectedChannel) url.searchParams.set("channel", selectedChannel);
+        return url;
+    }
+
+    // Returns null when the filter changed while the request was in flight
+    async function fetchPackets(url) {
+        const channel = selectedChannel;
+        const data = await (await fetch(url)).json();
+        return channel === selectedChannel ? data : null;
+    }
+
     async function fetchInitial() {
         try {
-            const resp = await fetch("/api/packets?portnum=1&limit=100");
-            const data = await resp.json();
-            if (data?.packets?.length) renderPacketsEnsureDescending(data.packets);
-            lastTime = data?.latest_import_time || lastTime;
+            const data = await fetchPackets(packetsUrl());
+            if (!data) return;
+            if (data.packets?.length) renderPacketsEnsureDescending(data.packets);
+            lastTime = data.latest_import_time || lastTime;
         } catch(err){
             console.error("Initial fetch error:", err);
         }
@@ -287,13 +285,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function fetchUpdates() {
         try {
-            const url = new URL("/api/packets?portnum=1", window.location.origin);
-            url.searchParams.set("limit","100");
+            const url = packetsUrl();
             if (lastTime) url.searchParams.set("since", lastTime);
-            const resp = await fetch(url);
-            const data = await resp.json();
-            if (data?.packets?.length) renderPacketsEnsureDescending(data.packets, true);
-            lastTime = data?.latest_import_time || lastTime;
+            const data = await fetchPackets(url);
+            if (!data) return;
+            if (data.packets?.length) renderPacketsEnsureDescending(data.packets, true);
+            lastTime = data.latest_import_time || lastTime;
         } catch(err){
             console.error("Fetch updates error:", err);
         }

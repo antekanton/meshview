@@ -104,6 +104,7 @@
 
 </div>
 
+<script src="/static/channel-filter.js"></script>
 <script>
 /* ======================================================
    TRANSLATIONS
@@ -146,8 +147,6 @@ function avgClass(v) {
    LOAD CHANNELS
    ====================================================== */
 async function loadChannels() {
-    const res = await fetch("/api/channels");
-    const data = await res.json();
     const sel = document.getElementById("channelFilter");
 
     sel.innerHTML = "";
@@ -156,12 +155,8 @@ async function loadChannels() {
     allOpt.textContent = topTranslations.all_channels || "All channels";
     sel.appendChild(allOpt);
 
-    for (const ch of data.channels || []) {
-        const opt = document.createElement("option");
-        opt.value = ch;
-        opt.textContent = ch;
-        sel.appendChild(opt);
-    }
+    // The table filters nodes by the channel name they report, so list those names
+    await loadChannelOptions(sel, { source: "nodes" });
 
     sel.value = "";
 }

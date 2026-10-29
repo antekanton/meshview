@@ -99,6 +99,7 @@
 {% block head %}
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <script src="/static/portmaps.js"></script>
+<script src="/static/channel-filter.js"></script>
 {% endblock %}
 
 {% block body %}
@@ -293,16 +294,6 @@ async function fetchNodes(){
         const res=await fetch("/api/nodes");
         const json=await res.json();
         return json.nodes||[];
-    }catch{
-        return [];
-    }
-}
-
-async function fetchChannels(){
-    try{
-        const res = await fetch("/api/channels");
-        const json = await res.json();
-        return json.channels || [];
     }catch{
         return [];
     }
@@ -534,7 +525,6 @@ function renderDailySnapshotNodesGatewaysChart(domId,data){
     return chart;
 }
 
-
 // --- Packet Type Pie Chart ---
 async function fetchPacketTypeBreakdown(channel=null) {
     const portnums = [1,3,4,67,70,71];
@@ -579,14 +569,11 @@ function renderSnapshotCharts(){
 
 async function init(){
     // Channel selector
-    const channels = await fetchChannels();
-    const select = document.getElementById("channelSelect");
-    channels.forEach(ch=>{
-        const opt = document.createElement("option");
-        opt.value = ch;
-        opt.textContent = ch;
-        select.appendChild(opt);
-    });
+    await loadChannelOptions(
+        document.getElementById("channelSelect"),
+        {},
+        window.statsTranslations?.unknown_channels || "Unknown",
+    );
 
     // Daily snapshot histogram
     dailySnapshots = await fetchDailySnapshots();
@@ -824,6 +811,7 @@ async function loadConfigAndTranslations() {
         const key = el.getAttribute("data-translate-lang");
         if(t[key]) el.textContent = t[key];
     });
+    setUnknownChannelsText(document.getElementById("channelSelect"), t.unknown_channels);
 }
 
 // Call after init
