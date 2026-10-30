@@ -4,6 +4,40 @@
 
 The project serves as a real-time monitoring and diagnostic tool for the Meshtastic mesh network. It provides detailed insights into network activity, including message traffic, node positions, and telemetry data.
 
+### Version 3.0.9 — October 2026
+
+- Live map: added animated packet traces from senders to reporting gateways and configurable channel colors through the optional `[map_channel_colors]` section in `config.ini`.
+- Daily snapshots: new snapshots report activity for the previous complete UTC day, including newly imported packets, unique packet senders observed that day, and gateways that reported packets that day. Existing historical snapshots keep their original counts.
+- Node tracking: record nodes from packet activity before their node information arrives, and preserve known positions when map reports have missing or invalid coordinates.
+- Neighbor SNR chart: show the last seven days and the 15 neighbors with the most data points, distinguish neighbors with identical short names, and fix CSV export.
+- MQTT reliability: skip malformed messages and invalid node IDs without stopping packet ingestion.
+- Security and privacy: escape mesh-provided text in web pages, restrict language and static file requests to their intended directories, and prevent payload searches from matching redacted direct messages.
+- Coverage API: validate and bound request parameters, and run coverage calculations off the event loop to keep the web server responsive.
+- Contributors: thanks to [nullrouten0](https://github.com/nullrouten0) and Nathan for the neighbor SNR chart, MQTT reliability, security, privacy, and coverage API fixes; Manuel Villaverde for improving map channel color visibility; and [Pablo Revilla](https://github.com/pablorevilla-meshtastic) for the live map, node tracking, and daily snapshot updates.
+
+#### Updating your configuration for 3.0.9
+
+Add the following section at the end of your existing `config.ini` to use these map channel colors.
+If `[map_channel_colors]` already exists, update that section instead of adding a duplicate.
+
+```ini
+# Map channel color overrides. Use six-digit hex colors; other channels get generated colors.
+# Names ignore case, spaces, hyphens, and underscores. Restart the web server after editing.
+[map_channel_colors]
+LongFast = #4363d8
+LongSlow = #000075
+VeryLongSlow = #808000
+MediumSlow = #008080
+MediumFast = #e6194b
+ShortSlow = #911eb4
+ShortFast = #f58231
+LongModerate = #46f0f0
+ShortTurbo = #f032e6
+```
+
+Restart the web server and reload the map after saving. This section is optional;
+channels without an override use generated colors.
+
 ### Version 3.0.8 — September 2026
 - Map updates: added OpenTopoMap as a selectable base map, improved map controls, and fixed several map/node display edge cases.
 - Traceroute: added a dedicated traceroute page, corrected route path orientation in graph edges, and improved traceroute API/documentation support.
@@ -22,7 +56,7 @@ The project serves as a real-time monitoring and diagnostic tool for the Meshtas
 - Tooling: improved the protobuf updater so it supports raw commit SHAs, the newer upstream `meshtastic/*.proto` layout, generated `.pyi` stubs, and the vendored `nanopb`/`serial_hal` outputs.
 
 ### Version 3.0.6 — March 2026
-- Daily snapshots: added the `daily_snapshot` table, scheduled snapshot capture, and `/api/snapshots/daily` for historical node, packet, and gateway counts.
+- Daily snapshots: added the `daily_snapshot` table, scheduled snapshot capture, and `/api/snapshots/daily` for historical node, packet, and gateway counts. These originally stored database totals; version 3.0.9 changes new snapshots to daily activity counts.
 - Stats/UI: expanded stats views with snapshot data and added channel filters to Chat and Firehose.
 - Map/node fixes: corrected node location handling, map popup behavior, packet page display, and node list sorting.
 - Ingestion/API reliability: improved duplicate `PacketSeen` handling, guarded invalid node info packets, and made traceroute/edge APIs more tolerant of decode failures.

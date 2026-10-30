@@ -4,11 +4,14 @@ from datetime import UTC, datetime, timedelta, timezone
 from sqlalchemy import Text, and_, case, cast, func, or_, select
 from sqlalchemy.orm import lazyload
 
+from meshtastic.protobuf.portnums_pb2 import PortNum
 from meshview import database, models
 from meshview.channels import UNKNOWN_GROUP, channel_filter_options
 from meshview.models import Node, Packet, PacketSeen, Traceroute
 
 logger = logging.getLogger(__name__)
+
+BROADCAST_NODE_ID = 0xFFFFFFFF
 
 
 def channel_condition(channel: str):
@@ -82,6 +85,14 @@ async def get_packets(
             contains_lower = f"%{contains.lower()}%"
             payload_text = cast(models.Packet.payload, Text)
             conditions.append(func.lower(payload_text).like(contains_lower))
+            # Direct text messages are shown as "<redacted>" by the API, so they must not be
+            # searchable either: a match would reveal their contents one substring at a time.
+            conditions.append(
+                or_(
+                    models.Packet.portnum != PortNum.TEXT_MESSAGE_APP,
+                    models.Packet.to_node_id == BROADCAST_NODE_ID,
+                )
+            )
 
         # Apply WHERE conditions
         if conditions:
