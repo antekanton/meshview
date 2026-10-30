@@ -76,4 +76,5 @@ _Avoid_: seen count, seen by, reception count
 
 **Active gateway**:
 A gateway that, within the configured activity window (2 hours by default), uplinked at least one packet sent by another node on a given channel. A packet's reach is read against the number of active gateways on its channel; a sender that uplinked its own packet is added to that number for that packet only, so a gateway that only uplinks its own packets never counts for anyone else's.
+A daily snapshot's gateway count is not a count of active gateways: it counts every gateway that uplinked any packet during that day, its own packets included, across all channels.
 _Avoid_: online gateway, known gateway
